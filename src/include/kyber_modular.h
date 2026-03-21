@@ -4,10 +4,12 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "params.h"
-#include "poly.h"
+#include "workspace.h"
 
 namespace PQC {
 namespace KEM {
+
+using Memory::CryptoWorkspace;
 
 class KyberBase {
 protected:
@@ -18,17 +20,17 @@ protected:
 class Kyber512 : public KyberBase {
 public:
     static const int K = 2;
-    static int keypair(uint8_t *pk, uint8_t *sk);
-    static int encaps(uint8_t *ct, uint8_t *ss, const uint8_t *pk);
-    static int decaps(uint8_t *ss, const uint8_t *ct, const uint8_t *sk);
+    static int keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk);
+    static int encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk);
+    static int decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk);
 };
 
 class Kyber768 : public KyberBase {
 public:
     static const int K = 3;
-    static int keypair(uint8_t *pk, uint8_t *sk);
-    static int encaps(uint8_t *ct, uint8_t *ss, const uint8_t *pk);
-    static int decaps(uint8_t *ss, const uint8_t *ct, const uint8_t *sk);
+    static int keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk);
+    static int encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk);
+    static int decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk);
 };
 
 } // namespace KEM

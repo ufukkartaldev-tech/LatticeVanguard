@@ -5,8 +5,12 @@
 #include <stddef.h>
 #include "dilithium_params.h"
 
+#include "workspace.h"
+
 namespace PQC {
 namespace DSA {
+
+using Memory::CryptoWorkspace;
 
 typedef struct {
     int32_t coeffs[256];
@@ -36,9 +40,9 @@ typedef struct {
 class Dilithium2 {
 public:
     // API
-    static int keypair(uint8_t *pk, uint8_t *sk);
-    static int sign(uint8_t *sig, size_t *siglen, const uint8_t *m, size_t mlen, const uint8_t *sk);
-    static int verify(const uint8_t *sig, size_t siglen, const uint8_t *m, size_t mlen, const uint8_t *pk);
+    static int keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk);
+    static int sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const uint8_t *m, size_t mlen, const uint8_t *sk);
+    static int verify(CryptoWorkspace* ws, const uint8_t *sig, size_t siglen, const uint8_t *m, size_t mlen, const uint8_t *pk);
 
 private:
     // Dahili matematiksel fonksiyonlar (Modular architecture)

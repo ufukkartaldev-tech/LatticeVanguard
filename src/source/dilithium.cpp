@@ -193,7 +193,8 @@ static void expand_matrix_row(poly row[DILITHIUM2_L], const uint8_t rho[32], uin
 
 // --- PUBLIC API ---
 
-int Dilithium2::keypair(uint8_t *pk, uint8_t *sk) {
+int Dilithium2::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
+    if (!ws) ws = &crypto_workspace;
     Security::SecurityOfficer::check_entropy_lock();
     // Simplified: Real keygen requires s1, s2 generation and t calculation.
     // For this fixing task, we focus on verify correctness.
@@ -202,21 +203,23 @@ int Dilithium2::keypair(uint8_t *pk, uint8_t *sk) {
     return 0;
 }
 
-int Dilithium2::sign(uint8_t *sig, size_t *siglen, const uint8_t *m, size_t mlen, const uint8_t *sk) {
+int Dilithium2::sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const uint8_t *m, size_t mlen, const uint8_t *sk) {
+    if (!ws) ws = &crypto_workspace;
     // Simplified: Real sign requires Fiat-Shamir with aborts loop.
     *siglen = DILITHIUM2_SIGNBYTES;
     memset(sig, 0xAA, DILITHIUM2_SIGNBYTES);
     return 0;
 }
 
-int Dilithium2::verify(const uint8_t *sig, size_t siglen, const uint8_t *m, size_t mlen, const uint8_t *pk) {
+int Dilithium2::verify(CryptoWorkspace* ws, const uint8_t *sig, size_t siglen, const uint8_t *m, size_t mlen, const uint8_t *pk) {
+    if (!ws) ws = &crypto_workspace;
     if (siglen != DILITHIUM2_SIGNBYTES) return -1;
 
     uint8_t rho[32], c_seed[32], mu[64];
-    polyvecl &z = crypto_workspace.maths.dvl;
-    polyveck &h = crypto_workspace.maths.dvk1;
-    polyveck &t1 = crypto_workspace.maths.dvk2;
-    poly &cp = crypto_workspace.maths.dp1;
+    polyvecl &z = ws->maths.dvl;
+    polyveck &h = ws->maths.dvk1;
+    polyveck &t1 = ws->maths.dvk2;
+    poly &cp = ws->maths.dp1;
     
     // 1. Unpack PK and Signature
     unpack_pk(rho, &t1, pk);
@@ -240,12 +243,12 @@ int Dilithium2::verify(const uint8_t *sig, size_t siglen, const uint8_t *m, size
     dilithium_ntt(cp.coeffs);
 
     // 4. Compute w1 = UseHint(h, Az - cp * t1 * 2^d)
-    polyveck &w1 = crypto_workspace.maths.dvk3;
+    polyveck &w1 = ws->maths.dvk3;
     for (int i = 0; i < DILITHIUM2_K; i++) {
         poly row[DILITHIUM2_L];
         expand_matrix_row(row, rho, i);
         
-        poly &res = crypto_workspace.maths.dp2;
+        poly &res = ws->maths.dp2;
         memset(res.coeffs, 0, sizeof(res.coeffs));
 
         for (int j = 0; j < DILITHIUM2_L; j++) {

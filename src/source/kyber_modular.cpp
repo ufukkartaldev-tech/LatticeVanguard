@@ -29,14 +29,15 @@ void KyberBase::gen_matrix_row(polyvec *a_row, const uint8_t seed[32], int row_i
 }
 
 // Kyber512 Implementation
-int Kyber512::keypair(uint8_t *pk, uint8_t *sk) {
+int Kyber512::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
+    if (!ws) ws = &crypto_workspace; // Fallback to default if null
     Security::SecurityOfficer::check_entropy_lock();
     uint8_t buf[64];
     uint8_t public_seed[32], noise_seed[32];
-    polyvec &a_row = crypto_workspace.maths.kv1;
-    polyvec &skpv = crypto_workspace.maths.kv2;
-    polyvec &e = crypto_workspace.maths.kv3;
-    polyvec &pkpv = crypto_workspace.maths.kv4;
+    polyvec &a_row = ws->maths.kv1;
+    polyvec &skpv = ws->maths.kv2;
+    polyvec &e = ws->maths.kv3;
+    polyvec &pkpv = ws->maths.kv4;
     uint8_t nonce = 0;
 
     memset(&skpv, 0, sizeof(skpv)); memset(&e, 0, sizeof(e)); memset(&pkpv, 0, sizeof(pkpv));
@@ -69,16 +70,17 @@ int Kyber512::keypair(uint8_t *pk, uint8_t *sk) {
     return 0;
 }
 
-int Kyber512::encaps(uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
+int Kyber512::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
+    if (!ws) ws = &crypto_workspace;
     uint8_t buf[64], kr[64], msg[32];
-    polyvec &a_row = crypto_workspace.maths.kv1;
-    polyvec &pkpv = crypto_workspace.maths.kv2;
-    polyvec &sp = crypto_workspace.maths.kv3;
-    polyvec &e1 = crypto_workspace.maths.kv4;
-    polyvec &bp = crypto_workspace.maths.kv5;
-    poly &v = crypto_workspace.maths.kp1;
-    poly &k_poly = crypto_workspace.maths.kp2;
-    poly &e2 = crypto_workspace.maths.kp3;
+    polyvec &a_row = ws->maths.kv1;
+    polyvec &pkpv = ws->maths.kv2;
+    polyvec &sp = ws->maths.kv3;
+    polyvec &e1 = ws->maths.kv4;
+    polyvec &bp = ws->maths.kv5;
+    poly &v = ws->maths.kp1;
+    poly &k_poly = ws->maths.kp2;
+    poly &e2 = ws->maths.kp3;
     uint8_t nonce = 0;
 
     memset(&pkpv, 0, sizeof(pkpv)); memset(&sp, 0, sizeof(sp));
@@ -116,16 +118,17 @@ int Kyber512::encaps(uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
     return 0;
 }
 
-int Kyber512::decaps(uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
+int Kyber512::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
+    if (!ws) ws = &crypto_workspace;
     uint8_t buf[64], kr[64], msg[32], ct_re[KYBER_512_CIPHERTEXTBYTES];
     const uint8_t *pk = sk + KYBER_512_K * KYBER_POLYBYTES;
     const uint8_t *h_pk = sk + KYBER_512_SECRETKEYBYTES - 64;
     const uint8_t *z = sk + KYBER_512_SECRETKEYBYTES - 32;
 
-    polyvec &bp = crypto_workspace.maths.kv1;
-    polyvec &skpv = crypto_workspace.maths.kv2;
-    poly &v = crypto_workspace.maths.kp1;
-    poly &mp = crypto_workspace.maths.kp2;
+    polyvec &bp = ws->maths.kv1;
+    polyvec &skpv = ws->maths.kv2;
+    poly &v = ws->maths.kp1;
+    poly &mp = ws->maths.kp2;
 
     memset(&bp, 0, sizeof(bp)); memset(&skpv, 0, sizeof(skpv)); memset(&v, 0, sizeof(v)); memset(&mp, 0, sizeof(mp));
 
@@ -161,13 +164,14 @@ int Kyber512::decaps(uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
 }
 
 // Kyber768 Implementation
-int Kyber768::keypair(uint8_t *pk, uint8_t *sk) {
+int Kyber768::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
+    if (!ws) ws = &crypto_workspace;
     uint8_t buf[64];
     uint8_t public_seed[32], noise_seed[32];
-    polyvec &a_row = crypto_workspace.maths.kv1;
-    polyvec &skpv = crypto_workspace.maths.kv2;
-    polyvec &e = crypto_workspace.maths.kv3;
-    polyvec &pkpv = crypto_workspace.maths.kv4;
+    polyvec &a_row = ws->maths.kv1;
+    polyvec &skpv = ws->maths.kv2;
+    polyvec &e = ws->maths.kv3;
+    polyvec &pkpv = ws->maths.kv4;
     uint8_t nonce = 0;
 
     memset(&skpv, 0, sizeof(skpv)); memset(&e, 0, sizeof(e)); memset(&pkpv, 0, sizeof(pkpv));
@@ -199,16 +203,17 @@ int Kyber768::keypair(uint8_t *pk, uint8_t *sk) {
     return 0;
 }
 
-int Kyber768::encaps(uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
+int Kyber768::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
+    if (!ws) ws = &crypto_workspace;
     uint8_t buf[64], kr[64], msg[32];
-    polyvec &a_row = crypto_workspace.maths.kv1;
-    polyvec &pkpv = crypto_workspace.maths.kv2;
-    polyvec &sp = crypto_workspace.maths.kv3;
-    polyvec &e1 = crypto_workspace.maths.kv4;
-    polyvec &bp = crypto_workspace.maths.kv5;
-    poly &v = crypto_workspace.maths.kp1;
-    poly &k_poly = crypto_workspace.maths.kp2;
-    poly &e2 = crypto_workspace.maths.kp3;
+    polyvec &a_row = ws->maths.kv1;
+    polyvec &pkpv = ws->maths.kv2;
+    polyvec &sp = ws->maths.kv3;
+    polyvec &e1 = ws->maths.kv4;
+    polyvec &bp = ws->maths.kv5;
+    poly &v = ws->maths.kp1;
+    poly &k_poly = ws->maths.kp2;
+    poly &e2 = ws->maths.kp3;
     uint8_t nonce = 0;
 
     memset(&pkpv, 0, sizeof(pkpv)); memset(&sp, 0, sizeof(sp));
@@ -245,16 +250,17 @@ int Kyber768::encaps(uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
     return 0;
 }
 
-int Kyber768::decaps(uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
+int Kyber768::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
+    if (!ws) ws = &crypto_workspace;
     uint8_t buf[64], kr[64], msg[32], ct_re[KYBER_768_CIPHERTEXTBYTES];
     const uint8_t *pk = sk + KYBER_768_K * KYBER_POLYBYTES;
     const uint8_t *h_pk = sk + KYBER_768_SECRETKEYBYTES - 64;
     const uint8_t *z = sk + KYBER_768_SECRETKEYBYTES - 32;
 
-    polyvec &bp = crypto_workspace.maths.kv1;
-    polyvec &skpv = crypto_workspace.maths.kv2;
-    poly &v = crypto_workspace.maths.kp1;
-    poly &mp = crypto_workspace.maths.kp2;
+    polyvec &bp = ws->maths.kv1;
+    polyvec &skpv = ws->maths.kv2;
+    poly &v = ws->maths.kp1;
+    poly &mp = ws->maths.kp2;
 
     memset(&bp, 0, sizeof(bp)); memset(&skpv, 0, sizeof(skpv)); memset(&v, 0, sizeof(v)); memset(&mp, 0, sizeof(mp));
 
