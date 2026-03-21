@@ -14,8 +14,12 @@ namespace System {
  */
 class OTAGuard {
 public:
-    // Güncelleme paketini doğrula
-    // [Signature (2420 bytes)] + [Firmware Binary]
+    // Streaming OTA Validation API
+    static bool begin_streaming_verification(const uint8_t* signature);
+    static void process_firmware_chunk(const uint8_t* chunk, size_t len);
+    static bool complete_streaming_verification();
+    
+    // Legacy support
     static bool verify_update(const uint8_t* update_data, size_t total_len);
 
     // Root Kamu Anahtarını hazırla (Genellikle üretimde bir kez gömülür)

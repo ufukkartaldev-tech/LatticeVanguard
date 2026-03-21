@@ -64,8 +64,12 @@ static int32_t decompose(int32_t a, int32_t *a0) {
 }
 
 static int32_t make_hint(int32_t a, int32_t b) {
-    if (a <= GAMMA2 && a > -GAMMA2) return 0;
-    return 1;
+    (void)b;
+    // Constant-time / Branchless check for: if (a <= GAMMA2 && a > -GAMMA2) return 0; else return 1;
+    // Converts to: a + GAMMA2 - 1 >= 0 AND GAMMA2 - a >= 0
+    uint32_t u1 = (uint32_t)(a + GAMMA2 - 1);
+    uint32_t u2 = (uint32_t)(GAMMA2 - a);
+    return ((u1 >> 31) | (u2 >> 31));
 }
 
 static int32_t use_hint(int32_t a, uint8_t hint) {

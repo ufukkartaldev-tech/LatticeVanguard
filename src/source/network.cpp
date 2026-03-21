@@ -30,7 +30,7 @@ static volatile bool last_send_ok = false;
 static volatile bool ack_received = false;
 
 static uint8_t LOCAL_MAC[6];
-static uint8_t HMAC_SECRET[32] = {0x41, 0x47, 0x5F, 0x46, 0x49, 0x52, 0x45, 0x57, 0x41, 0x4C, 0x4C, 0x5F, 0x4B, 0x45, 0x59, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+static uint8_t HMAC_SECRET[32] = {0}; // Silinen Hardcoded Key (System::KeyVault üzerinden NVS'ten yüklenecek)
 
 struct network_msg_t {
     uint8_t target_mac[6];
@@ -61,6 +61,17 @@ bool Messenger::init() {
 
     using PQC::System::KeyVault;
     KeyVault::load_config_uint32("tx_msg_id", &global_msg_id);
+
+    // Hardcoded anahtar temizliği ve eFuse/NVS tabanlı mimari
+    if (!KeyVault::load_key("hmac_secret", HMAC_SECRET, 32)) {
+#ifdef ARDUINO
+        esp_fill_random(HMAC_SECRET, 32);
+#else
+        for (int i = 0; i < 32; i++) HMAC_SECRET[i] = (uint8_t)(rand() & 0xFF);
+#endif
+        KeyVault::save_key("hmac_secret", HMAC_SECRET, 32);
+        ESP_LOGW("PQC_NETWORK", "HMAC_SECRET not found in NVS! Generated and securely stored a new random key.");
+    }
 
     network_queue = xQueueCreate(2, sizeof(network_msg_t));
     xTaskCreatePinnedToCore(network_task, "NetTask", 4096, NULL, 5, NULL, 0); 
