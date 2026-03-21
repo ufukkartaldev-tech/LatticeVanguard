@@ -7,6 +7,7 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
+#include "esp_log.h"
 
 namespace PQC {
 namespace Network {
@@ -17,6 +18,8 @@ using namespace PQC::Security;
 // --- GÜVENLİK KATI: Modül Seviyesinde İzole Değişkenler ---
 static ring_buffer_t network_ring_buffer = {0};
 static SemaphoreHandle_t ring_buffer_mutex = NULL;
+static SemaphoreHandle_t hmac_mutex = NULL;
+static portMUX_TYPE ring_buffer_spinlock = portMUX_INITIALIZER_UNLOCKED;
 static QueueHandle_t network_queue = NULL;
 
 static peer_record_t peer_registry[MAX_PEERS];
@@ -52,6 +55,7 @@ bool Messenger::init() {
     esp_now_register_send_cb(Messenger::on_data_sent);
 
     ring_buffer_mutex = xSemaphoreCreateMutex();
+    hmac_mutex = xSemaphoreCreateMutex();
     memset(peer_registry, 0, sizeof(peer_registry));
     memset(blacklist, 0, sizeof(blacklist));
 
@@ -69,7 +73,12 @@ void Messenger::on_data_sent(const uint8_t* mac, esp_now_send_status_t status) {
     last_send_ok = (status == ESP_NOW_SEND_SUCCESS);
 }
 
-void Messenger::compute_hmac(uint8_t* out, const uint8_t* hmac_input, size_t len, const uint8_t* key) {
+bool Messenger::compute_hmac(uint8_t* out, const uint8_t* hmac_input, size_t len, const uint8_t* key) {
+    if (xSemaphoreTake(hmac_mutex, 10 / portTICK_PERIOD_MS) != pdTRUE) {
+        ESP_LOGE("PQC_NETWORK", "HMAC Mutex alinmadi, islem iptal!");
+        return false;
+    }
+
     // SİBER SAVUNMA: HMAC-SHA3-256 Firewall
     // Bu işlem, paketi PQC işlemlerine sokmadan önce 'kapıdaki güvenlik' olarak çalışır. 
     // İmza uymuyorsa paket anında CPU'ya yük bindirmeden drop edilir. (DoS Koruması)
@@ -88,6 +97,9 @@ void Messenger::compute_hmac(uint8_t* out, const uint8_t* hmac_input, size_t len
     memcpy(blob, opad, 64);
     memcpy(blob + 64, inner_hash, 32);
     sha3_256(out, blob, 64 + 32);
+
+    xSemaphoreGive(hmac_mutex);
+    return true;
 }
 
 bool Messenger::is_blacklisted(const uint8_t* mac) {
@@ -171,7 +183,10 @@ void Messenger::on_data_recv(const uint8_t* mac, const uint8_t* incomingData, in
     uint8_t hmac_source[12 + 190];
     memcpy(hmac_source, pkt->iv, 12);
     memcpy(hmac_source + 12, pkt->data, 190);
-    compute_hmac(calculated_hmac, hmac_source, 12 + 190, HMAC_SECRET);
+    if (!compute_hmac(calculated_hmac, hmac_source, 12 + 190, HMAC_SECRET)) {
+        ESP_LOGE("PQC_NETWORK", "HMAC was dropped due to mutex timeout!");
+        return;
+    }
 
     if (!SecurityOfficer::secure_compare(pkt->hmac, calculated_hmac, 32)) {
         handle_blacklist(mac, false);
@@ -222,7 +237,10 @@ void Messenger::send_ack(const uint8_t* mac, uint32_t msg_id, uint8_t seq) {
     NetworkPrivacy::wrap(&ack_p, &ack_h, NULL, 0);
     uint8_t h_in[12 + 190];
     memcpy(h_in, ack_p.iv, 12); memcpy(h_in + 12, ack_p.data, 190);
-    Messenger::compute_hmac(ack_p.hmac, h_in, 12 + 190, HMAC_SECRET);
+    if (!Messenger::compute_hmac(ack_p.hmac, h_in, 12 + 190, HMAC_SECRET)) {
+        ESP_LOGE("PQC_NETWORK", "Cannot compute HMAC for ACK!");
+        return;
+    }
     
     esp_now_send((uint8_t*)mac, (uint8_t*)&ack_p, sizeof(ack_p));
 }
@@ -251,7 +269,10 @@ void network_task(void* pvParameters) {
                 
                 uint8_t src[12 + 190];
                 memcpy(src, p.iv, 12); memcpy(src + 12, p.data, 190);
-                Messenger::compute_hmac(p.hmac, src, 12 + 190, HMAC_SECRET);
+                if (!Messenger::compute_hmac(p.hmac, src, 12 + 190, HMAC_SECRET)) {
+                    ESP_LOGE("PQC_NETWORK", "Cannot compute HMAC for MSG_DATA!");
+                    continue;
+                }
 
                 for (int r = 0; r < 3; r++) {
                     ack_received = false;
@@ -283,8 +304,13 @@ void crypto_task(void* pvParameters) {
 
 bool Messenger::ring_buffer_write(const uint8_t* data, size_t len) {
     if (len > RING_BUFFER_SIZE) return false;
+    
+    portENTER_CRITICAL(&ring_buffer_spinlock);
     uint32_t next_head = (network_ring_buffer.head + len) & RING_BUFFER_MASK;
-    if (next_head == network_ring_buffer.tail) return false;
+    if (next_head == network_ring_buffer.tail) {
+        portEXIT_CRITICAL(&ring_buffer_spinlock);
+        return false;
+    }
     
     if (next_head > network_ring_buffer.head) {
         memcpy(network_ring_buffer.buffer + network_ring_buffer.head, data, len);
@@ -294,48 +320,61 @@ bool Messenger::ring_buffer_write(const uint8_t* data, size_t len) {
         memcpy(network_ring_buffer.buffer, data + first, len - first);
     }
     network_ring_buffer.head = next_head;
+    portEXIT_CRITICAL(&ring_buffer_spinlock);
     return true;
 }
 
 bool Messenger::ring_buffer_read(uint8_t* data, size_t* len) {
     if (xSemaphoreTake(ring_buffer_mutex, portMAX_DELAY) == pdTRUE) {
-        if (network_ring_buffer.head == network_ring_buffer.tail) { xSemaphoreGive(ring_buffer_mutex); return false; }
+        portENTER_CRITICAL(&ring_buffer_spinlock);
+        bool empty = (network_ring_buffer.head == network_ring_buffer.tail);
+        portEXIT_CRITICAL(&ring_buffer_spinlock);
+
+        if (empty) { xSemaphoreGive(ring_buffer_mutex); return false; }
         
-        uint16_t m_len;
+        uint16_t message_length;
         uint32_t t = network_ring_buffer.tail;
         
         // Circular buffer read for length
         if (t + 2 > RING_BUFFER_SIZE) {
-            memcpy(&m_len, network_ring_buffer.buffer + t, RING_BUFFER_SIZE - t);
-            memcpy(((uint8_t*)&m_len) + (RING_BUFFER_SIZE - t), network_ring_buffer.buffer, 2 - (RING_BUFFER_SIZE - t));
+            memcpy(&message_length, network_ring_buffer.buffer + t, RING_BUFFER_SIZE - t);
+            memcpy(((uint8_t*)&message_length) + (RING_BUFFER_SIZE - t), network_ring_buffer.buffer, 2 - (RING_BUFFER_SIZE - t));
             t = 2 - (RING_BUFFER_SIZE - t);
         } else {
-            memcpy(&m_len, network_ring_buffer.buffer + t, 2);
+            memcpy(&message_length, network_ring_buffer.buffer + t, 2);
             t += 2;
         }
         
-        if (m_len > *len) { xSemaphoreGive(ring_buffer_mutex); return false; }
+        if (message_length > *len) { xSemaphoreGive(ring_buffer_mutex); return false; }
         
         // Circular buffer read for data
-        if (t + m_len > RING_BUFFER_SIZE) {
+        if (t + message_length > RING_BUFFER_SIZE) {
             size_t f = RING_BUFFER_SIZE - t;
             memcpy(data, network_ring_buffer.buffer + t, f);
-            memcpy(data + f, network_ring_buffer.buffer, m_len - f);
-            t = m_len - f;
+            memcpy(data + f, network_ring_buffer.buffer, message_length - f);
+            t = message_length - f;
         } else {
-            memcpy(data, network_ring_buffer.buffer + t, m_len);
-            t += m_len;
+            memcpy(data, network_ring_buffer.buffer + t, message_length);
+            t += message_length;
         }
         
+        portENTER_CRITICAL(&ring_buffer_spinlock);
         network_ring_buffer.tail = t;
-        *len = m_len;
+        portEXIT_CRITICAL(&ring_buffer_spinlock);
+        
+        *len = message_length;
         xSemaphoreGive(ring_buffer_mutex);
         return true;
     }
     return false;
 }
 
-bool Messenger::ring_buffer_has_data() { return (network_ring_buffer.head != network_ring_buffer.tail); }
+bool Messenger::ring_buffer_has_data() { 
+    portENTER_CRITICAL(&ring_buffer_spinlock);
+    bool has_data = (network_ring_buffer.head != network_ring_buffer.tail);
+    portEXIT_CRITICAL(&ring_buffer_spinlock);
+    return has_data;
+}
 bool Messenger::is_busy() { return messenger_busy; }
 
 } // namespace Network

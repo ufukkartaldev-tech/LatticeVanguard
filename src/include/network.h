@@ -100,7 +100,8 @@ public:
 private:
     static void handle_blacklist(const uint8_t* mac, bool success);
     static bool check_replay(const uint8_t* mac, uint32_t msg_id);
-    static void compute_hmac(uint8_t* out, const uint8_t* data, size_t len, const uint8_t* key);
+    static bool compute_hmac(uint8_t* out, const uint8_t* data, size_t len, const uint8_t* key);
+    static bool ring_buffer_write(const uint8_t* data, size_t len);
 };
 
 } // namespace Network
