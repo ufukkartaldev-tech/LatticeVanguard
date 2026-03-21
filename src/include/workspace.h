@@ -29,12 +29,12 @@ union CryptoWorkspace {
             uint8_t ss[64];
         } data;
 
-        // 2. Matematiksel Ham Katman (Scratchpad) - 24KB
+        // 2. Matematiksel Ham Katman (Scratchpad)
         struct {
             polyvec kv1, kv2, kv3, kv4, kv5;
             poly    kp1, kp2, kp3;
-            PQC::DSA::polyvecl dvl;
-            PQC::DSA::polyveck dvk1, dvk2, dvk3;
+            PQC::DSA::polyvecl dvl, dvl2;
+            PQC::DSA::polyveck dvk1, dvk2, dvk3, dvk4;
             PQC::DSA::poly dp1, dp2;
         } maths;
 
@@ -44,7 +44,7 @@ union CryptoWorkspace {
             PQC::DSA::packed_polyvecl pdvl;
         } compact;
     };
-    uint8_t raw[40000]; // Yaklaşık boyut, güvenli silme için
+    uint8_t raw[56000]; // Güvenli silme için (struct boyutunu kapsamalı)
 };
 
 // Core 0 - Ağ verileri için ayrı buffer (Ring Buffer dışında kalanlar)

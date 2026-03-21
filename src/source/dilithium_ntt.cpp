@@ -2,9 +2,9 @@
 #include "../include/pqc_config.h"
 
 // Montgomery constants for q = 8380417
-// QINV = -q^-1 mod 2^32
-#define D_QINV 58728449
-#define D_MONT 4194304 // 2^32 mod q
+#define D_Q    8380417   // Dilithium modulus
+#define D_QINV 58728449  // -q^-1 mod 2^32
+#define D_MONT 4194304   // 2^32 mod q
 
 PQC_FLASH_STORAGE static const int32_t zetas_d[256] = {
     0, 25847, 577150, 7180900, 3192015, 786885, 3054131, 2697858,
@@ -42,17 +42,16 @@ PQC_FLASH_STORAGE static const int32_t zetas_d[256] = {
 
 static int32_t montgomery_reduce_d(int64_t a) {
     int32_t t;
-    t = (int32_t)((uint32_t)a * D_QINV);
-    t = (int32_t)((a - (int64_t)t * D_QINV) >> 32);
-    // Dilithium için montgomery reduce biraz daha dikkatli (64-bit ara değer)
+    t = (int32_t)((uint32_t)a * D_QINV);  // low 32 bits: a * q^-1
+    t = (int32_t)((a - (int64_t)t * D_Q) >> 32);  // (a - t*Q) >> 32
     return t;
 }
 
-// Barrett reduction alternatifi (Dilithium için)
+// Barrett reduction (Dilithium için)
 static int32_t reduce32(int32_t a) {
     int32_t t;
     t = (a + (1 << 22)) >> 23;
-    t = a - t * D_QINV;
+    t = a - t * D_Q;  // a mod Q, D_QINV değil!
     return t;
 }
 

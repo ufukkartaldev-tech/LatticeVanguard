@@ -245,7 +245,13 @@ int Dilithium2::sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const ui
     keccak_state st; shake256_init(&st); shake256_absorb(&st, tr, 32); shake256_absorb(&st, m, mlen); shake256_squeeze(mu, 64, &st);
     shake256_init(&st); shake256_absorb(&st, key, 32); shake256_absorb(&st, mu, 64); shake256_squeeze(rhoprime, 64, &st);
 
-    polyvecl s1, s2_l; polyveck s2, t0;
+    // --- Stack Overflow Fix: Tüm büyük vektörler workspace'te ---
+    // Eski hali: polyvecl s1(4KB), polyveck s2(4KB), t0(4KB) + döngüde y(4KB), w0(4KB) = ~20KB stack
+    // Yeni hali: Hepsi CryptoWorkspace struct içinde, stack ~0.5KB
+    polyvecl &s1 = ws->maths.dvl2;   // Persistent: gizli anahtar bileşeni
+    polyveck &s2 = ws->maths.dvk3;   // Persistent: gizli anahtar bileşeni
+    polyveck &t0 = ws->maths.dvk4;   // Persistent: gizli anahtar bileşeni
+
     const uint8_t *skp = sk + 96;
     for (int i = 0; i < DILITHIUM2_L; i++) { unpack_eta(&s1.vec[i], skp); skp += 96; }
     for (int i = 0; i < DILITHIUM2_K; i++) { unpack_eta(&s2.vec[i], skp); skp += 96; }
@@ -253,52 +259,86 @@ int Dilithium2::sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const ui
 
     uint16_t nonce = 0;
     while (true) {
-        polyvecl y; for (int i = 0; i < DILITHIUM2_L; i++) expand_mask(&y.vec[i], rhoprime, nonce++);
+        // y workspace'te yaşar, sonra in-place z'ye dönüşür
+        polyvecl &y = ws->maths.dvl;
+        for (int i = 0; i < DILITHIUM2_L; i++) expand_mask(&y.vec[i], rhoprime, nonce++);
+
+        // w = A * y (A satır satır üretilip atılır, row[] hâlâ stack'te ama döngü scope'unda)
         polyveck &w = ws->maths.dvk1;
         for (int i = 0; i < DILITHIUM2_K; i++) {
-            poly row[DILITHIUM2_L]; expand_A(row, rho, i); memset(w.vec[i].coeffs, 0, sizeof(poly));
+            memset(w.vec[i].coeffs, 0, sizeof(poly));
             for (int j = 0; j < DILITHIUM2_L; j++) {
-                dilithium_ntt(row[j].coeffs); poly y_ntt = y.vec[j]; dilithium_ntt(y_ntt.coeffs);
+                // A[i][j]'yi tek tek üret → dp1, y[j]'nin NTT kopyası → dp2
+                poly &a_ij = ws->maths.dp1;
+                {
+                    uint8_t seed[34]; memcpy(seed, rho, 32);
+                    seed[32] = (uint8_t)j; seed[33] = (uint8_t)i;
+                    keccak_state ast; shake128_init(&ast); shake128_absorb(&ast, seed, 34);
+                    int ctr = 0; uint8_t ab[SHAKE128_RATE];
+                    while (ctr < 256) {
+                        shake128_squeeze(ab, SHAKE128_RATE, &ast);
+                        for (int k2 = 0; k2 < SHAKE128_RATE - 2 && ctr < 256; k2 += 3) {
+                            uint32_t val = (uint32_t)ab[k2] | ((uint32_t)ab[k2+1] << 8) | ((uint32_t)ab[k2+2] << 16);
+                            val &= 0x7FFFFF; if (val < Q) a_ij.coeffs[ctr++] = val;
+                        }
+                    }
+                }
+                dilithium_ntt(a_ij.coeffs);
+                poly &y_ntt = ws->maths.dp2;
+                y_ntt = y.vec[j]; dilithium_ntt(y_ntt.coeffs);
                 for (int k = 0; k < 256; k++) {
-                    int32_t prod = montgomery_reduce((int64_t)row[j].coeffs[k] * y_ntt.coeffs[k]);
+                    int32_t prod = montgomery_reduce((int64_t)a_ij.coeffs[k] * y_ntt.coeffs[k]);
                     w.vec[i].coeffs[k] = add_mod(w.vec[i].coeffs[k], prod);
                 }
             }
             dilithium_invntt(w.vec[i].coeffs);
         }
-        polyveck &w1 = ws->maths.dvk2, w0;
-        for (int i = 0; i < DILITHIUM2_K; i++) for (int j = 0; j < 256; j++) w1.vec[i].coeffs[j] = decompose(w.vec[i].coeffs[j], &w0.vec[i].coeffs[j]);
+
+        // w1 = HighBits(w), w0 tamamen atılıyor (zaten sonra yeniden hesaplanıyor)
+        polyveck &w1 = ws->maths.dvk2;
+        for (int i = 0; i < DILITHIUM2_K; i++)
+            for (int j = 0; j < 256; j++) {
+                int32_t w0_discard;
+                w1.vec[i].coeffs[j] = decompose(w.vec[i].coeffs[j], &w0_discard);
+            }
+
         shake256_init(&st); shake256_absorb(&st, mu, 64);
         for (int i = 0; i < DILITHIUM2_K; i++) for (int j = 0; j < 128; j++) {
             uint8_t b = (uint8_t)w1.vec[i].coeffs[2*j] | (uint8_t)(w1.vec[i].coeffs[2*j+1] << 4);
             shake256_absorb(&st, &b, 1);
         }
         uint8_t c_seed[32]; shake256_squeeze(c_seed, 32, &st);
-        poly cp; challenge(&cp, c_seed); poly cp_ntt = cp; dilithium_ntt(cp_ntt.coeffs);
+        poly cp; challenge(&cp, c_seed);
+        poly cp_ntt = cp; dilithium_ntt(cp_ntt.coeffs);
 
-        polyvecl &z = ws->maths.dvl; bool rejected = false;
+        // z = c*s1 + y (y in-place olarak z'ye dönüşür, dp1 scratch olarak kullanılır)
+        bool rejected = false;
         for (int i = 0; i < DILITHIUM2_L; i++) {
-            poly s1_ntt = s1.vec[i]; dilithium_ntt(s1_ntt.coeffs);
+            poly &tmp = ws->maths.dp1;
+            tmp = s1.vec[i]; dilithium_ntt(tmp.coeffs);
+            for (int k = 0; k < 256; k++)
+                tmp.coeffs[k] = montgomery_reduce((int64_t)cp_ntt.coeffs[k] * tmp.coeffs[k]);
+            dilithium_invntt(tmp.coeffs);
             for (int k = 0; k < 256; k++) {
-                int32_t prod = montgomery_reduce((int64_t)cp_ntt.coeffs[k] * s1_ntt.coeffs[k]);
-                z.vec[i].coeffs[k] = prod;
-            }
-            dilithium_invntt(z.vec[i].coeffs);
-            for (int k = 0; k < 256; k++) {
-                z.vec[i].coeffs[k] = add_mod(y.vec[i].coeffs[k], z.vec[i].coeffs[k]);
-                int32_t val = z.vec[i].coeffs[k]; if (val > (int32_t)Q / 2) val -= Q; if (val < 0) val = -val;
+                y.vec[i].coeffs[k] = add_mod(y.vec[i].coeffs[k], tmp.coeffs[k]);
+                int32_t val = y.vec[i].coeffs[k]; if (val > (int32_t)Q / 2) val -= Q; if (val < 0) val = -val;
                 if (val >= GAMMA1 - BETA) { rejected = true; break; }
             }
             if (rejected) break;
         }
         if (rejected) continue;
+        // y artık z'yi içeriyor
+        polyvecl &z = y;
 
+        // r0 sınır kontrolü (s2 check)
         for (int i = 0; i < DILITHIUM2_K; i++) {
-            poly s2_ntt = s2.vec[i]; dilithium_ntt(s2_ntt.coeffs);
-            poly cs2; for (int k = 0; k < 256; k++) cs2.coeffs[k] = montgomery_reduce((int64_t)cp_ntt.coeffs[k] * s2_ntt.coeffs[k]);
-            dilithium_invntt(cs2.coeffs);
+            poly &tmp = ws->maths.dp1;
+            tmp = s2.vec[i]; dilithium_ntt(tmp.coeffs);
+            for (int k = 0; k < 256; k++)
+                tmp.coeffs[k] = montgomery_reduce((int64_t)cp_ntt.coeffs[k] * tmp.coeffs[k]);
+            dilithium_invntt(tmp.coeffs);
             for (int k = 0; k < 256; k++) {
-                int32_t r0; decompose(sub_mod(w.vec[i].coeffs[k], cs2.coeffs[k]), &r0);
+                int32_t r0; decompose(sub_mod(w.vec[i].coeffs[k], tmp.coeffs[k]), &r0);
                 int32_t val = r0; if (val > (int32_t)Q / 2) val -= Q; if (val < 0) val = -val;
                 if (val >= GAMMA2 - BETA) { rejected = true; break; }
             }
@@ -306,15 +346,21 @@ int Dilithium2::sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const ui
         }
         if (rejected) continue;
 
-        // Hint generation (omega check)
+        // Hint generation (omega check) — dp1 ve dp2 scratch olarak kullanılır
         uint8_t h_bytes[OMEGA + DILITHIUM2_K]; memset(h_bytes, 0, sizeof(h_bytes));
         int hints = 0;
         for (int i = 0; i < DILITHIUM2_K; i++) {
-            poly t0_ntt = t0.vec[i]; dilithium_ntt(t0_ntt.coeffs);
-            poly ct0; for (int k = 0; k < 256; k++) ct0.coeffs[k] = montgomery_reduce((int64_t)cp_ntt.coeffs[k] * t0_ntt.coeffs[k]);
+            // ct0 = c * t0[i]
+            poly &ct0 = ws->maths.dp1;
+            ct0 = t0.vec[i]; dilithium_ntt(ct0.coeffs);
+            for (int k = 0; k < 256; k++)
+                ct0.coeffs[k] = montgomery_reduce((int64_t)cp_ntt.coeffs[k] * ct0.coeffs[k]);
             dilithium_invntt(ct0.coeffs);
-            poly cs2_ntt = s2.vec[i]; dilithium_ntt(cs2_ntt.coeffs);
-            poly cs2; for (int k = 0; k < 256; k++) cs2.coeffs[k] = montgomery_reduce((int64_t)cp_ntt.coeffs[k] * cs2_ntt.coeffs[k]);
+            // cs2 = c * s2[i]
+            poly &cs2 = ws->maths.dp2;
+            cs2 = s2.vec[i]; dilithium_ntt(cs2.coeffs);
+            for (int k = 0; k < 256; k++)
+                cs2.coeffs[k] = montgomery_reduce((int64_t)cp_ntt.coeffs[k] * cs2.coeffs[k]);
             dilithium_invntt(cs2.coeffs);
             for (int k = 0; k < 256; k++) {
                 int32_t rem0; decompose(sub_mod(sub_mod(w.vec[i].coeffs[k], cs2.coeffs[k]), ct0.coeffs[k]), &rem0);
