@@ -54,7 +54,7 @@ void test_authenticated_encryption() {
     static uint32_t test_counter = 0;
     Nonce::generate(nonce, test_counter++);
     
-    const char* original_msg = "GumusDil PQC: Kuantum Guvenli ve Kimlik Dogrulamali Veri Paketi!";
+    const char* original_msg = "LatticeVanguard PQC: Kuantum Guvenli ve Kimlik Dogrulamali Veri Paketi!";
     size_t msg_len = strlen(original_msg);
     
     Serial.print("Orijinal Mesaj : "); Serial.println(original_msg);
@@ -123,7 +123,7 @@ void test_adaptive_authenticated_encryption() {
     
     bool high_security = (retries == 0); // Hiç hata yoksa 768 kullan
     
-    const char* msg = "GumusDil Adaptive PQC Packet";
+    const char* msg = "LatticeVanguard Adaptive PQC Packet";
     size_t msg_len = strlen(msg);
     uint8_t encrypted[64], decrypted[64];
     uint8_t nonce[12];
@@ -284,7 +284,7 @@ void setup() {
     #ifndef PQC_SILENT_MODE
     Serial.begin(115200);
     delay(2000);
-    Serial.println("\n===== ESP32 POST-QUANTUM SUITE (KYBER & DILITHIUM) =====");
+    Serial.println("\n===== LatticeVanguard: ESP32 POST-QUANTUM SUITE =====");
     #endif
     
     SecurityOfficer::init(); 

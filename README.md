@@ -1,7 +1,7 @@
-# GümüşPQC: Optimized Post-Quantum Cryptography Library for ESP32
+# LatticeVanguard: Optimized Post-Quantum Cryptography Library for ESP32
 
 ## Overview
-GümüşPQC is a high-performance, memory-efficient Post-Quantum Cryptography (PQC) library specifically engineered for the ESP32 microcontroller architecture. The system leverages the NIST-standardized Kyber Key Encapsulation Mechanism (KEM) and Dilithium Digital Signature Algorithm (DSA) to provide robust, quantum-resistant security for resource-constrained embedded systems.
+LatticeVanguard is a high-performance, memory-efficient Post-Quantum Cryptography (PQC) library specifically engineered for the ESP32 microcontroller architecture. The system leverages the NIST-standardized Kyber Key Encapsulation Mechanism (KEM) and Dilithium Digital Signature Algorithm (DSA) to provide robust, quantum-resistant security for resource-constrained embedded systems.
 
 ## Key Features
 - **Kyber (512/768)**: Quantum-resistant key exchange protocol ensuring forward secrecy against future cryptographic threats.

@@ -25,7 +25,7 @@ void NetworkPrivacy::set_network_master_key(const uint8_t key[32]) {
 void NetworkPrivacy::update_epoch_key(uint32_t epoch_id) {
     if (epoch_id == last_epoch_id) return;
 
-    // Gümüş Çözüm: Anahtar Rotasyonu (Moving Target)
+    // LatticeVanguard Solution: Moving Target Defense (Key Rotation)
     // EpochID geliştikçe yeni anahtar = SHA3(MasterKey | EpochID)
     uint8_t input[36];
     memcpy(input, network_master_key, 32);

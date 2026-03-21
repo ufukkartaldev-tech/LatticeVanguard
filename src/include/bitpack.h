@@ -9,7 +9,7 @@ namespace PQC {
 namespace Utils {
 
 /**
- * BitPacker (Gümüşhane Usulü Sıkıştırma)
+ * BitPacker (LatticeVanguard Data Compression)
  * Verileri ham halleriyle (32-bit/16-bit) tutmak yerine, 
  * bit seviyesinde paketleyerek RAM'den %25-40 kar eder.
  */

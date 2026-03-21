@@ -8,7 +8,7 @@ namespace PQC {
 namespace System {
 
 /**
- * BlackBox (Gümüşhane Kara Kutu)
+ * BlackBox (LatticeVanguard Secure Logging)
  * Beklenmedik hataları, RAM sızıntılarını ve sistem çökmelerini 
  * Flash (LittleFS) üzerine kaydeder. Cihaz kapansa bile hata izi silinmez.
  */

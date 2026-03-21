@@ -11,7 +11,7 @@ namespace PQC {
 namespace Memory {
 
 /**
- * PQC_Workspace (Gümüşhane Usulü Bellek Geri Dönüşümü)
+ * PQC_Workspace (LatticeVanguard Memory Optimization)
  * Core 0 (Ağ) ve Core 1 (Kriptografi) için ayrı bellek alanları.
  * Bellek çakışmalarını ve kitlenmeleri önler.
  */

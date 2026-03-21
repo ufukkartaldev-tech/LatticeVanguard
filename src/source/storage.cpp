@@ -37,7 +37,7 @@ void KeyVault::generate_master_key() {
     uint8_t secret_salt[32];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
-    // Gümüş Çözüm: Salt değerini NVS (Flash) yerine eFuse (Hardware) bloğundan oku.
+    // LatticeVanguard Solution: Salt value read from eFuse (Hardware) instead of NVS (Flash).
     // eFuse dışarıdan okunamaz hale getirilebilir, böylece Flash Dump anahtarı ele veremez.
     bool hardware_secure = false;
     #ifdef ARDUINO

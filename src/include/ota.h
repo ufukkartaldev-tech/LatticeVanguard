@@ -8,7 +8,7 @@ namespace PQC {
 namespace System {
 
 /**
- * OTAGuard (Gümüş OTA Koruması)
+ * OTAGuard (LatticeVanguard OTA Protection)
  * Uzaktan güncellemeleri Dilithium ile doğrular.
  * Bu sayede sahte yazılım yüklenmesi (Firmware Hijacking) imkansız hale gelir.
  */
