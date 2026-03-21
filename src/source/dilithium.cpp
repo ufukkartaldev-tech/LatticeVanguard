@@ -296,7 +296,7 @@ int Dilithium2::verify(CryptoWorkspace* ws, const uint8_t *sig, size_t siglen, c
     }
     shake256_squeeze(c_prime, 32, &state);
 
-    return memcmp(c_seed, c_prime, 32) == 0 ? 0 : 1;
+    return Security::SecurityOfficer::secure_compare(c_seed, c_prime, 32) ? 0 : 1;
 }
 
 } // namespace DSA

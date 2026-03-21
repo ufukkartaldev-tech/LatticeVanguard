@@ -1,6 +1,7 @@
 #include "../include/kyber.h"
 #include "../include/poly.h"
 #include "../include/fips202.h"
+#include "../include/security.h"
 #include <string.h>
 
 using namespace PQC::Memory;
@@ -189,9 +190,8 @@ int kyber512_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const u
     sha3_512(kr, buf, 64);
     indcpa_enc(ws, cmp_ct, msg, pk, kr + 32, k);
     
-    // Güvenli Karşılaştırma (Constant-Time Simülasyonu)
-    int fail = 0;
-    for(int i=0; i<KYBER_512_CIPHERTEXTBYTES; i++) fail |= (ct[i] ^ cmp_ct[i]);
+    // Constant-time check utilizing fault-injection protection
+    bool fail = !Security::SecurityOfficer::secure_compare(ct, cmp_ct, KYBER_512_CIPHERTEXTBYTES);
     
     sha3_256(kr + 32, ct, KYBER_512_CIPHERTEXTBYTES);
     if (fail) {
@@ -244,8 +244,7 @@ int kyber768_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const u
     sha3_512(kr, buf, 64);
     indcpa_enc(ws, cmp_ct, msg, pk, kr + 32, k);
     
-    int fail = 0;
-    for(int i=0; i<KYBER_768_CIPHERTEXTBYTES; i++) fail |= (ct[i] ^ cmp_ct[i]);
+    bool fail = !Security::SecurityOfficer::secure_compare(ct, cmp_ct, KYBER_768_CIPHERTEXTBYTES);
     
     sha3_256(kr + 32, ct, KYBER_768_CIPHERTEXTBYTES);
     if (fail) {
