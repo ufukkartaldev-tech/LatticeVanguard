@@ -80,7 +80,13 @@ bool KeyVault::save_key(const char* key_name, const uint8_t* key_data, size_t le
 
     // 1. Şifreleme (Encryption)
     // Şifreli veri yapısı: [IV (12)] | [TAG (16)] | [CIPHERTEXT (len)]
-    uint8_t iv[12] = {0xD, 0xE, 0xA, 0xD, 0xB, 0xE, 0xE, 0xF, 0, 1, 3, 3}; // Statik ama her cihazda MAC etkili.
+    uint8_t iv[12];
+    #ifdef ARDUINO
+    for(int i=0; i<12; i++) iv[i] = (uint8_t)esp_random();
+    #else
+    for(int i=0; i<12; i++) iv[i] = (uint8_t)rand();
+    #endif
+
     uint8_t tag[16];
     uint8_t* encrypted_blob = (uint8_t*)malloc(len + 12 + 16);
     if (!encrypted_blob) { nvs_close(nvs_handle); return false; }
