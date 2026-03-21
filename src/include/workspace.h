@@ -16,18 +16,19 @@ namespace Memory {
  * Bellek çakışmalarını ve kitlenmeleri önler.
  */
 
-// Core 1 - Kriptografik Matematik için 16KB Union (sadece Core 1 kullanır)
-union CryptoWorkspace {
-    // 1. Yazılım Veri Katmanı (Keys, Ciphertexts)
+// Core 1 - Kriptografik Matematik için Çalışma Alanı
+// 'data' (anahtarlar) ve 'maths' (hesaplama alanı) artık ayrı adreslerde (struct).
+struct CryptoWorkspace {
+    // 1. Yazılım Veri Katmanı (Keys, Ciphertexts) - 12KB
     struct {
         uint8_t pk[3000];
-        uint8_t sk[4500];
+        uint8_t sk[5000];
         uint8_t sig[DILITHIUM2_SIGNBYTES];
         uint8_t ct[1500];
         uint8_t ss[64];
     } data;
 
-    // 2. Matematiksel Ham Katman (Active Calc - Unpacked)
+    // 2. Matematiksel Ham Katman (Scratchpad) - 24KB
     struct {
         polyvec kv1, kv2, kv3, kv4, kv5;
         poly    kp1, kp2, kp3;
@@ -36,15 +37,11 @@ union CryptoWorkspace {
         PQC::DSA::poly dp1, dp2;
     } maths;
 
-    // 3. Matematiksel Sıkıştırılmış Katman (Deep Sleep Storage - Packed)
-    // Sadece saklanacak (arada bekleyecek) veriler için %25-40 kar sağlar.
+    // 3. Matematiksel Sıkıştırılmış Katman (Optimizasyon için opsiyonel)
     struct {
-        packed_polyvec kv1, kv2, kv3, kv4, kv5;
-        PQC::DSA::packed_polyvecl dvl;
-        PQC::DSA::packed_polyveck dvk1, dvk2;
+        packed_polyvec pkv1, pkv2;
+        PQC::DSA::packed_polyvecl pdvl;
     } compact;
-
-    uint8_t raw[16384]; 
 };
 
 // Core 0 - Ağ verileri için ayrı buffer (Ring Buffer dışında kalanlar)
