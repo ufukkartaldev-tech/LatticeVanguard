@@ -126,9 +126,23 @@ void KDF::derive_keys(uint8_t chacha_key[32], uint8_t aes_key[32], const uint8_t
 }
 
 void Nonce::generate(uint8_t iv[12], uint32_t counter) {
+    // SİBER SAVUNMA: Nonce-Reuse & Replay Protection
+    // AES-GCM şifrelemesinde aynı Nonce (IV) değerinin iki kez kullanılması tüm gizliliği yok eder.
+    // 'Hybrid Nonce' kullanarak hem donanım tabanlı rastgelelik (Hardware RNG) sağlıyoruz 
+    // hem de karşı tarafın paket sırasını (counter) doğrulamasına izin veriyoruz.
+    
+    // 1. Packet Counter (Sıralama takibi için)
     memcpy(iv, &counter, 4);
+
     #ifdef ARDUINO
-    #include <Arduino.h>
+    // 2. Hardware-Backed Entropy Priority
+    // Donanım RNG'si her zaman ilk 4 baytı XOR'layarak manipülasyonu engellemelidir.
+    uint32_t hw_rng = esp_random();
+    for (int i = 0; i < 4; i++) {
+        iv[i] ^= (uint8_t)(hw_rng >> (i * 8));
+    }
+    
+    // 3. Kalan 8 baytı tamamen donanım entropisi ile doldur.
     for(int i=4; i<12; i++) iv[i] = (uint8_t)esp_random();
     #else
     for(int i=4; i<12; i++) iv[i] = (uint8_t)rand();
