@@ -67,10 +67,7 @@ int Kyber512::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
     return 0;
 }
 
-int Kyber512::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
-    PQC::Memory::ScopedWorkspace local_ws;
-    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
-    uint8_t buf[64], kr[64], msg[32];
+void Kyber512::indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, const uint8_t *pk, const uint8_t *coins) {
     polyvec &a_row = ws->maths.kv1;
     polyvec &pkpv = ws->maths.kv2;
     polyvec &sp = ws->maths.kv3;
@@ -85,15 +82,11 @@ int Kyber512::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_
     memset(&e1, 0, sizeof(e1)); memset(&bp, 0, sizeof(bp)); memset(&v, 0, sizeof(v));
     memset(&k_poly, 0, sizeof(k_poly)); memset(&e2, 0, sizeof(e2));
 
-    KEM_RANDOM(msg, 32); sha3_256(msg, msg, 32);
-    memcpy(buf, msg, 32); sha3_256(buf + 32, pk, KYBER_512_PUBLICKEYBYTES);
-    sha3_512(kr, buf, 64);
-
     for (int i = 0; i < K; i++) poly_frombytes(&pkpv.vec[i], pk + i * KYBER_POLYBYTES);
 
-    for (int i = 0; i < K; i++) poly_getnoise_eta1(&sp.vec[i], kr + 32, nonce++, K);
-    for (int i = 0; i < K; i++) poly_getnoise_eta2(&e1.vec[i], kr + 32, nonce++);
-    poly_getnoise_eta2(&e2, kr + 32, nonce++);
+    for (int i = 0; i < K; i++) poly_getnoise_eta1(&sp.vec[i], coins, nonce++, K);
+    for (int i = 0; i < K; i++) poly_getnoise_eta2(&e1.vec[i], coins, nonce++);
+    poly_getnoise_eta2(&e2, coins, nonce++);
 
     polyvec_ntt(&sp, K);
     
@@ -110,6 +103,18 @@ int Kyber512::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_
 
     for (int i = 0; i < K; i++) poly_compress(ct + i * 320, &bp.vec[i], 10);
     poly_compress(ct + K * 320, &v, 4);
+}
+
+int Kyber512::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
+    uint8_t buf[64], kr[64], msg[32];
+
+    KEM_RANDOM(msg, 32); sha3_256(msg, msg, 32);
+    memcpy(buf, msg, 32); sha3_256(buf + 32, pk, KYBER_512_PUBLICKEYBYTES);
+    sha3_512(kr, buf, 64);
+
+    indcpa_enc(ws, ct, msg, pk, kr + 32);
 
     sha3_256(kr + 32, ct, KYBER_512_CIPHERTEXTBYTES);
     sha3_256(ss, kr, 64);
@@ -149,8 +154,7 @@ int Kyber512::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     sha3_512(kr, buf, 64); // kr[0..31] = ss, kr[32..63] = coins
 
     // Re-encrypt to verify ciphertext integrity
-    // Note: We avoid circular dependency by using the internal method if needed, but since it's a static class, it's fine.
-    Kyber512::encaps(ws, ct_re, ss, pk); // Uses coins derived from msg conceptually, but simplistically re-runs encaps
+    Kyber512::indcpa_enc(ws, ct_re, msg, pk, kr + 32);
 
     // 3. Secure Constant-time check
     bool fail = !Security::SecurityOfficer::secure_compare(ct, ct_re, KYBER_512_CIPHERTEXTBYTES);
@@ -211,10 +215,7 @@ int Kyber768::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
     return 0;
 }
 
-int Kyber768::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
-    PQC::Memory::ScopedWorkspace local_ws;
-    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
-    uint8_t buf[64], kr[64], msg[32];
+void Kyber768::indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, const uint8_t *pk, const uint8_t *coins) {
     polyvec &a_row = ws->maths.kv1;
     polyvec &pkpv = ws->maths.kv2;
     polyvec &sp = ws->maths.kv3;
@@ -229,15 +230,11 @@ int Kyber768::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_
     memset(&e1, 0, sizeof(e1)); memset(&bp, 0, sizeof(bp)); memset(&v, 0, sizeof(v));
     memset(&k_poly, 0, sizeof(k_poly)); memset(&e2, 0, sizeof(e2));
 
-    KEM_RANDOM(msg, 32); sha3_256(msg, msg, 32);
-    memcpy(buf, msg, 32); sha3_256(buf + 32, pk, KYBER_768_PUBLICKEYBYTES);
-    sha3_512(kr, buf, 64);
-
     for (int i = 0; i < K; i++) poly_frombytes(&pkpv.vec[i], pk + i * KYBER_POLYBYTES);
 
-    for (int i = 0; i < K; i++) poly_getnoise_eta1(&sp.vec[i], kr + 32, nonce++, KYBER_768_ETAl);
-    for (int i = 0; i < K; i++) poly_getnoise_eta2(&e1.vec[i], kr + 32, nonce++);
-    poly_getnoise_eta2(&e2, kr + 32, nonce++);
+    for (int i = 0; i < K; i++) poly_getnoise_eta1(&sp.vec[i], coins, nonce++, KYBER_768_ETAl);
+    for (int i = 0; i < K; i++) poly_getnoise_eta2(&e1.vec[i], coins, nonce++);
+    poly_getnoise_eta2(&e2, coins, nonce++);
 
     polyvec_ntt(&sp, K);
     
@@ -253,6 +250,18 @@ int Kyber768::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_
 
     for (int i = 0; i < K; i++) poly_compress(ct + i * 320, &bp.vec[i], 10);
     poly_compress(ct + K * 320, &v, 4);
+}
+
+int Kyber768::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
+    uint8_t buf[64], kr[64], msg[32];
+
+    KEM_RANDOM(msg, 32); sha3_256(msg, msg, 32);
+    memcpy(buf, msg, 32); sha3_256(buf + 32, pk, KYBER_768_PUBLICKEYBYTES);
+    sha3_512(kr, buf, 64);
+
+    indcpa_enc(ws, ct, msg, pk, kr + 32);
 
     sha3_256(kr + 32, ct, KYBER_768_CIPHERTEXTBYTES);
     sha3_256(ss, kr, 64);
@@ -291,7 +300,7 @@ int Kyber768::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     sha3_256(buf + 32, pk, KYBER_768_PUBLICKEYBYTES);
     sha3_512(kr, buf, 64);
 
-    Kyber768::encaps(ws, ct_re, ss, pk);
+    Kyber768::indcpa_enc(ws, ct_re, msg, pk, kr + 32);
 
     bool fail = !Security::SecurityOfficer::secure_compare(ct, ct_re, KYBER_768_CIPHERTEXTBYTES);
     

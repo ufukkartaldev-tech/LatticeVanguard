@@ -23,6 +23,8 @@ public:
     static int keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk);
     static int encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk);
     static int decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk);
+private:
+    static void indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, const uint8_t *pk, const uint8_t *coins);
 };
 
 class Kyber768 : public KyberBase {
@@ -31,6 +33,8 @@ public:
     static int keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk);
     static int encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk);
     static int decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk);
+private:
+    static void indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, const uint8_t *pk, const uint8_t *coins);
 };
 
 } // namespace KEM
