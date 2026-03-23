@@ -188,10 +188,7 @@ void Messenger::on_data_recv(const uint8_t* mac, const uint8_t* incomingData, in
     
     // 2. CRYPTOGRAPHIC FIREWALL (HMAC Check)
     uint8_t calculated_hmac[32];
-    uint8_t hmac_source[12 + 190];
-    memcpy(hmac_source, pkt->iv, 12);
-    memcpy(hmac_source + 12, pkt->data, 190);
-    if (!compute_hmac(calculated_hmac, hmac_source, 12 + 190, HMAC_SECRET)) {
+    if (!compute_hmac(calculated_hmac, (const uint8_t*)pkt, 250 - 32, HMAC_SECRET)) {
         ESP_LOGE("PQC_NETWORK", "HMAC was dropped due to mutex timeout!");
         return;
     }
@@ -243,9 +240,7 @@ void Messenger::send_ack(const uint8_t* mac, uint32_t msg_id, uint8_t seq) {
     
     fragment_packet_t ack_p;
     NetworkPrivacy::wrap(&ack_p, &ack_h, NULL, 0);
-    uint8_t h_in[12 + 190];
-    memcpy(h_in, ack_p.iv, 12); memcpy(h_in + 12, ack_p.data, 190);
-    if (!Messenger::compute_hmac(ack_p.hmac, h_in, 12 + 190, HMAC_SECRET)) {
+    if (!Messenger::compute_hmac(ack_p.hmac, (const uint8_t*)&ack_p, 250 - 32, HMAC_SECRET)) {
         ESP_LOGE("PQC_NETWORK", "Cannot compute HMAC for ACK!");
         return;
     }
@@ -275,9 +270,7 @@ void network_task(void* pvParameters) {
                 
                 NetworkPrivacy::wrap(&p, &h, m.data + (i * PQC_PAYLOAD_SIZE), c_len);
                 
-                uint8_t src[12 + 190];
-                memcpy(src, p.iv, 12); memcpy(src + 12, p.data, 190);
-                if (!Messenger::compute_hmac(p.hmac, src, 12 + 190, HMAC_SECRET)) {
+                if (!Messenger::compute_hmac(p.hmac, (const uint8_t*)&p, 250 - 32, HMAC_SECRET)) {
                     ESP_LOGE("PQC_NETWORK", "Cannot compute HMAC for MSG_DATA!");
                     continue;
                 }

@@ -44,10 +44,11 @@ typedef struct {
  * Geçersiz imzalı paketler CPU'nun PQC motorlarını yormadan 'Firewall' katmanında atılır.
  */
 typedef struct {
+    packet_header_t header; // 14 bytes (Plaintext AAD)
     uint8_t iv[12]; 
-    uint8_t hmac[32];     // FIREWALL: HMAC-SHA3-256 (CPU DOS koruması)
     uint8_t auth_tag[16];   // AES-GCM Authenticator
-    uint8_t data[190];      // Encrypted Header + Payload
+    uint8_t payload[176];   // Encrypted Payload
+    uint8_t hmac[32];       // FIREWALL: HMAC-SHA3-256 (CPU DOS koruması)
 } __attribute__((packed, aligned(4))) fragment_packet_t;
 
 // Anti-Replay Sliding Window (Multi-Device Track)
