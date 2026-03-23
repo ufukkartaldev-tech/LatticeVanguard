@@ -452,9 +452,24 @@ int Dilithium2::unpack_sig(uint8_t c_seed[32], polyvecl *z, polyveck *h, const u
         }
         sig += 576;
     }
-    memset(h, 0, sizeof(polyveck)); int k_sig = 0;
-    for (int i = 0; i < DILITHIUM2_K; i++) {
-        for (int j = sig[OMEGA + i]; j < sig[OMEGA + i + 1]; j++) { h->vec[i].coeffs[sig[j]] = 1; }
+    memset(h, 0, sizeof(polyveck)); size_t k_sig = 0;
+    for (size_t i = 0; i < DILITHIUM2_K; i++) {
+        size_t limit = sig[OMEGA + i];
+        // Sıkı Boundary Check (Sınır Kontrolü)
+        if (limit < k_sig || limit > OMEGA) {
+            return -1;
+        }
+        for (size_t j = k_sig; j < limit; j++) {
+            // Indexlerin sıralı (öngörülebilir) olduğunun tespiti ve sınır kontrolü
+            if (j > k_sig && sig[j] <= sig[j - 1]) return -1;
+            h->vec[i].coeffs[sig[j]] = 1;
+        }
+        k_sig = limit;
+    }
+    
+    // Geriye kalan alanların sahte veri taşımadığından emin olma
+    for (size_t j = k_sig; j < OMEGA; j++) {
+        if (sig[j] != 0) return -1;
     }
     return 0;
 }
