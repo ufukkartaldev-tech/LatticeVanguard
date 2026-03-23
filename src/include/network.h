@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <freertos/message_buffer.h>
 #endif
 
 #include "workspace.h"
@@ -66,16 +67,7 @@ typedef struct {
     uint32_t expiry;      // Timestamp for blacklist lift
 } blacklist_t;
 
-// Ring Buffer structure (Core 0 to Core 1 bridge)
-typedef struct {
-    uint8_t buffer[RING_BUFFER_SIZE];
-    volatile uint32_t head;
-    volatile uint32_t tail;
-    uint32_t active_msg_id;
-    uint8_t expected_seq;
-    uint8_t total_fragments;
-    bool session_active;
-} ring_buffer_t;
+// Removed custom ring_buffer_t since we'll use FreeRTOS MessageBuffer
 
 class Messenger {
 public:

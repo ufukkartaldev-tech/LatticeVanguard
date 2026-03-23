@@ -17,10 +17,8 @@ using namespace PQC::Memory;
 using namespace PQC::Security;
 
 // --- GÜVENLİK KATI: Modül Seviyesinde İzole Değişkenler ---
-static ring_buffer_t network_ring_buffer = {0};
-static SemaphoreHandle_t ring_buffer_mutex = NULL;
+static MessageBufferHandle_t network_msg_buffer = NULL;
 static SemaphoreHandle_t hmac_mutex = NULL;
-static portMUX_TYPE ring_buffer_spinlock = portMUX_INITIALIZER_UNLOCKED;
 static QueueHandle_t network_queue = NULL;
 static QueueHandle_t recv_queue = NULL;
 
@@ -62,7 +60,9 @@ bool Messenger::init() {
     esp_now_register_recv_cb(Messenger::on_data_recv);
     esp_now_register_send_cb(Messenger::on_data_sent);
 
-    ring_buffer_mutex = xSemaphoreCreateMutex();
+    network_msg_buffer = xMessageBufferCreate(RING_BUFFER_SIZE);
+    if (network_msg_buffer == NULL) return false;
+
     hmac_mutex = xSemaphoreCreateMutex();
     memset(peer_registry, 0, sizeof(peer_registry));
     memset(blacklist, 0, sizeof(blacklist));
@@ -297,9 +297,7 @@ void crypto_task(void* pvParameters) {
                         if (header.type == MSG_ACK) { 
                             ack_received = true; 
                         } else if (header.type == MSG_DATA) {
-                            uint16_t p_len = header.payload_len;
-                            if (Messenger::ring_buffer_write((uint8_t*)&p_len, 2)) {
-                                Messenger::ring_buffer_write(payload, p_len);
+                            if (Messenger::ring_buffer_write(payload, header.payload_len)) {
                                 Messenger::send_ack(raw.mac, header.msg_id, header.seq);
                             }
                         }
@@ -319,77 +317,24 @@ void crypto_task(void* pvParameters) {
 }
 
 bool Messenger::ring_buffer_write(const uint8_t* data, size_t len) {
-    if (len > RING_BUFFER_SIZE) return false;
-    
-    portENTER_CRITICAL(&ring_buffer_spinlock);
-    uint32_t next_head = (network_ring_buffer.head + len) & RING_BUFFER_MASK;
-    if (next_head == network_ring_buffer.tail) {
-        portEXIT_CRITICAL(&ring_buffer_spinlock);
-        return false;
-    }
-    
-    if (next_head > network_ring_buffer.head) {
-        memcpy(network_ring_buffer.buffer + network_ring_buffer.head, data, len);
-    } else {
-        size_t first = RING_BUFFER_SIZE - network_ring_buffer.head;
-        memcpy(network_ring_buffer.buffer + network_ring_buffer.head, data, first);
-        memcpy(network_ring_buffer.buffer, data + first, len - first);
-    }
-    network_ring_buffer.head = next_head;
-    portEXIT_CRITICAL(&ring_buffer_spinlock);
-    return true;
+    if (network_msg_buffer == NULL) return false;
+    size_t written = xMessageBufferSend(network_msg_buffer, data, len, 0);
+    return (written == len);
 }
 
 bool Messenger::ring_buffer_read(uint8_t* data, size_t* len) {
-    if (xSemaphoreTake(ring_buffer_mutex, portMAX_DELAY) == pdTRUE) {
-        portENTER_CRITICAL(&ring_buffer_spinlock);
-        bool empty = (network_ring_buffer.head == network_ring_buffer.tail);
-        portEXIT_CRITICAL(&ring_buffer_spinlock);
-
-        if (empty) { xSemaphoreGive(ring_buffer_mutex); return false; }
-        
-        uint16_t message_length;
-        uint32_t t = network_ring_buffer.tail;
-        
-        // Circular buffer read for length
-        if (t + 2 > RING_BUFFER_SIZE) {
-            memcpy(&message_length, network_ring_buffer.buffer + t, RING_BUFFER_SIZE - t);
-            memcpy(((uint8_t*)&message_length) + (RING_BUFFER_SIZE - t), network_ring_buffer.buffer, 2 - (RING_BUFFER_SIZE - t));
-            t = 2 - (RING_BUFFER_SIZE - t);
-        } else {
-            memcpy(&message_length, network_ring_buffer.buffer + t, 2);
-            t += 2;
-        }
-        
-        if (message_length > *len) { xSemaphoreGive(ring_buffer_mutex); return false; }
-        
-        // Circular buffer read for data
-        if (t + message_length > RING_BUFFER_SIZE) {
-            size_t f = RING_BUFFER_SIZE - t;
-            memcpy(data, network_ring_buffer.buffer + t, f);
-            memcpy(data + f, network_ring_buffer.buffer, message_length - f);
-            t = message_length - f;
-        } else {
-            memcpy(data, network_ring_buffer.buffer + t, message_length);
-            t += message_length;
-        }
-        
-        portENTER_CRITICAL(&ring_buffer_spinlock);
-        network_ring_buffer.tail = t;
-        portEXIT_CRITICAL(&ring_buffer_spinlock);
-        
-        *len = message_length;
-        xSemaphoreGive(ring_buffer_mutex);
+    if (network_msg_buffer == NULL) return false;
+    size_t received = xMessageBufferReceive(network_msg_buffer, data, *len, 0);
+    if (received > 0) {
+        *len = received;
         return true;
     }
     return false;
 }
 
 bool Messenger::ring_buffer_has_data() { 
-    portENTER_CRITICAL(&ring_buffer_spinlock);
-    bool has_data = (network_ring_buffer.head != network_ring_buffer.tail);
-    portEXIT_CRITICAL(&ring_buffer_spinlock);
-    return has_data;
+    if (network_msg_buffer == NULL) return false;
+    return xMessageBufferIsEmpty(network_msg_buffer) == pdFALSE;
 }
 bool Messenger::is_busy() { return messenger_busy; }
 
