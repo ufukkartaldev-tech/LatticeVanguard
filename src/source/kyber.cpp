@@ -152,7 +152,8 @@ static void indcpa_dec(CryptoWorkspace* ws, uint8_t *msg, const uint8_t *ct, con
 
 // CCA Safe KEM Functions
 int kyber512_keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
-    if (!ws) ws = &PQC::Memory::crypto_workspace;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     int k = 2;
     indcpa_keypair(ws, pk, sk, k);
     memcpy(sk + k * KYBER_POLYBYTES, pk, KYBER_512_PUBLICKEYBYTES);
@@ -162,7 +163,8 @@ int kyber512_keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
 }
 
 int kyber512_encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
-    if (!ws) ws = &PQC::Memory::crypto_workspace;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64], kr[64], msg[32];
     int k = 2;
     GET_RANDOM(msg, 32);
@@ -177,7 +179,8 @@ int kyber512_encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t
 }
 
 int kyber512_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
-    if (!ws) ws = &PQC::Memory::crypto_workspace;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64], kr[64], msg[32], cmp_ct[KYBER_512_CIPHERTEXTBYTES];
     int k = 2;
     const uint8_t *pk = sk + k * KYBER_POLYBYTES;
@@ -206,7 +209,8 @@ int kyber512_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const u
 }
 
 int kyber768_keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
-    if (!ws) ws = &PQC::Memory::crypto_workspace;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     int k = 3;
     indcpa_keypair(ws, pk, sk, k);
     memcpy(sk + k * KYBER_POLYBYTES, pk, KYBER_768_PUBLICKEYBYTES);
@@ -216,7 +220,8 @@ int kyber768_keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
 }
 
 int kyber768_encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
-    if (!ws) ws = &PQC::Memory::crypto_workspace;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64], kr[64], msg[32];
     int k = 3;
     GET_RANDOM(msg, 32);
@@ -231,7 +236,8 @@ int kyber768_encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t
 }
 
 int kyber768_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
-    if (!ws) ws = &PQC::Memory::crypto_workspace;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64], kr[64], msg[32], cmp_ct[KYBER_768_CIPHERTEXTBYTES];
     int k = 3;
     const uint8_t *pk = sk + k * KYBER_POLYBYTES;

@@ -47,6 +47,26 @@ union CryptoWorkspace {
     uint8_t raw[56000]; // Güvenli silme için (struct boyutunu kapsamalı)
 };
 
+// Thread-safe / Task-safe Scoped Memory Allocation (Heap memory exhaustion prevention)
+class ScopedWorkspace {
+public:
+    CryptoWorkspace* ws;
+    ScopedWorkspace() {
+        ws = new CryptoWorkspace();
+        if (ws) {
+            for(size_t i=0; i<sizeof(ws->raw); i++) ws->raw[i] = 0;
+        }
+    }
+    ~ScopedWorkspace() {
+        if (ws) {
+            for(size_t i=0; i<sizeof(ws->raw); i++) ws->raw[i] = 0; // Secure wipe
+            delete ws;
+        }
+    }
+    CryptoWorkspace* operator->() { return ws; }
+    operator CryptoWorkspace*() { return ws; }
+};
+
 // Core 0 - Ağ verileri için ayrı buffer (Ring Buffer dışında kalanlar)
 struct NetworkWorkspace {
     uint8_t temp_buffer[4096];  // Geçici ağ verileri
@@ -54,8 +74,7 @@ struct NetworkWorkspace {
     uint8_t packet_buffer[512];  // Paket oluşturma için
 };
 
-extern CryptoWorkspace crypto_workspace;  // Sadece Core 1 erişir
-extern NetworkWorkspace network_workspace;  // Sadece Core 0 erişir
+extern NetworkWorkspace network_workspace;  // Ağ için global alan kalabilir, PQC için olan silindi
 
 } // namespace Memory
 } // namespace PQC

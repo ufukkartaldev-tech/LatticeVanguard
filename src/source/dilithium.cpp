@@ -193,7 +193,8 @@ static void expand_mask(poly *p, const uint8_t seed[64], uint16_t nonce) {
 // --- PUBLIC PQC METHODS ---
 
 int Dilithium2::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
-    if (!ws) ws = &crypto_workspace;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     Security::SecurityOfficer::check_entropy_lock();
     uint8_t entropy[32]; DSA_RANDOM(entropy, 32);
     uint8_t rho[32], rhoprime[64], key[32];
@@ -243,7 +244,8 @@ int Dilithium2::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
 }
 
 int Dilithium2::sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const uint8_t *m, size_t mlen, const uint8_t *sk) {
-    if (!ws) ws = &crypto_workspace;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t rho[32], key[32], tr[32], rhoprime[64], mu[64];
     memcpy(rho, sk, 32); memcpy(key, sk + 32, 32); memcpy(tr, sk + 64, 32);
     keccak_state st; shake256_init(&st); shake256_absorb(&st, tr, 32); shake256_absorb(&st, m, mlen); shake256_squeeze(mu, 64, &st);
@@ -381,7 +383,9 @@ int Dilithium2::sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const ui
 }
 
 int Dilithium2::verify(CryptoWorkspace* ws, const uint8_t *sig, size_t siglen, const uint8_t *m, size_t mlen, const uint8_t *pk) {
-    if (!ws) ws = &crypto_workspace; if (siglen != DILITHIUM2_SIGNBYTES) return -1;
+    PQC::Memory::ScopedWorkspace local_ws;
+    if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
+    if (siglen != DILITHIUM2_SIGNBYTES) return -1;
     uint8_t rho[32], c_seed[32], mu[64]; polyvecl &z = ws->maths.dvl; polyveck &h = ws->maths.dvk1, &t1 = ws->maths.dvk2;
     unpack_pk(rho, &t1, pk); unpack_sig(c_seed, &z, &h, sig);
     calculate_mu(mu, pk, m, mlen); poly cp; challenge(&cp, c_seed); poly cp_ntt = cp; dilithium_ntt(cp_ntt.coeffs);

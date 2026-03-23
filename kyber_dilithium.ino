@@ -39,13 +39,17 @@ const uint8_t PEER_MAC[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
 
 // GÜVENLİK: Tüm hassas verileri bellekten kazı!
 void wipe_all_sensitive_data() {
-    memset(crypto_workspace.raw, 0, sizeof(crypto_workspace.raw));
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) return;
+    memset(local_ws->raw, 0, sizeof(local_ws->raw));
     #ifndef PQC_SILENT_MODE
     Serial.println("SİSTEM: Tüm kriptografik bellek (CryptoWorkspace) fiziksel olarak RAM'den silindi.");
     #endif
 }
 
 void test_authenticated_encryption() {
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) { Serial.println("Bellek yetersiz (OOM)!"); return; }
     Serial.println("\n--- KIMLIK DOGRULAMALI SIFRELEME (KYBER + DILITHIUM + CHACHA20) ---");
     
     size_t sig_len;
@@ -60,18 +64,18 @@ void test_authenticated_encryption() {
     Serial.print("Orijinal Mesaj : "); Serial.println(original_msg);
 
     // 1. DILITHIUM: İmzalama (Gönderen Kimliğini Kanıtla)
-    Dilithium2::keypair(&crypto_workspace, crypto_workspace.data.pk, crypto_workspace.data.sk);
-    Dilithium2::sign(&crypto_workspace, crypto_workspace.data.sig, &sig_len, (const uint8_t*)original_msg, msg_len, crypto_workspace.data.sk);
+    Dilithium2::keypair(local_ws, local_ws->data.pk, local_ws->data.sk);
+    Dilithium2::sign(local_ws, local_ws->data.sig, &sig_len, (const uint8_t*)original_msg, msg_len, local_ws->data.sk);
     Serial.println("DURUM: Mesaj Dilithium (DSA) ile imzalandi.");
 
     // 2. KYBER: Anahtar Değişimi (Gizlilik Katmanı)
     // DİKKAT: Kyber anahtarları Dilithium anahtarlarının üzerine yazılır (RAM Tasarrufu)
-    Kyber512::keypair(&crypto_workspace, crypto_workspace.data.pk, crypto_workspace.data.sk);
-    Kyber512::encaps(&crypto_workspace, crypto_workspace.data.ct, crypto_workspace.data.ss, crypto_workspace.data.pk);
+    Kyber512::keypair(local_ws, local_ws->data.pk, local_ws->data.sk);
+    Kyber512::encaps(local_ws, local_ws->data.ct, local_ws->data.ss, local_ws->data.pk);
     
     // 3. HIBRIT SIFRELEME
     uint8_t chacha_key[32], aes_key[32];
-    KDF::derive_keys(chacha_key, aes_key, crypto_workspace.data.ss);
+    KDF::derive_keys(chacha_key, aes_key, local_ws->data.ss);
     
     ChaCha20::process(layer1, (const uint8_t*)original_msg, msg_len, chacha_key, nonce);
     AES256GCM::encrypt(encrypted, tag, layer1, msg_len, aes_key, nonce);
@@ -79,23 +83,23 @@ void test_authenticated_encryption() {
     
     // 4. KABLOSUZ GÖNDERİM
     Messenger::send_reliable(PEER_MAC, encrypted, msg_len);
-    Messenger::send_reliable(PEER_MAC, crypto_workspace.data.sig, sig_len);
+    Messenger::send_reliable(PEER_MAC, local_ws->data.sig, sig_len);
 
     // 5. ALICI TARAFI
     // Not: Alıcı PK ve CT hala crypto_workspace içinde geçerli varsayıyoruz (Demoda bufferlar bozulmuyor)
-    int verify_res = Dilithium2::verify(&crypto_workspace, crypto_workspace.data.sig, sig_len, (const uint8_t*)original_msg, msg_len, crypto_workspace.data.pk);
+    int verify_res = Dilithium2::verify(local_ws, local_ws->data.sig, sig_len, (const uint8_t*)original_msg, msg_len, local_ws->data.pk);
 
     if (verify_res == 0) {
         // Redundant check against fault-injection (Çift Doğrulama)
         // Eğer bir 'glitch' ile verify_res 0 yapıldıysa, bu ikinci kontrol (secure_compare) onu yakalar.
-        if (!SecurityOfficer::secure_compare(crypto_workspace.data.sig, crypto_workspace.data.sig, sig_len)) {
+        if (!SecurityOfficer::secure_compare(local_ws->data.sig, local_ws->data.sig, sig_len)) {
              Serial.println("Kritik Hata: Sistem Müdahalesi Saptandı!");
              return;
         }
         Serial.println("DURUM: Dilithium Imzasi GEÇERLİ! (Gonderen Dogrulandi)");
         
-        Kyber512::decaps(&crypto_workspace, crypto_workspace.data.ss, crypto_workspace.data.ct, crypto_workspace.data.sk);
-        KDF::derive_keys(chacha_key, aes_key, crypto_workspace.data.ss);
+        Kyber512::decaps(local_ws, local_ws->data.ss, local_ws->data.ct, local_ws->data.sk);
+        KDF::derive_keys(chacha_key, aes_key, local_ws->data.ss);
         
         uint8_t layer1_dec[128];
         AES256GCM::decrypt(layer1_dec, encrypted, msg_len, tag, aes_key, nonce);
@@ -113,6 +117,8 @@ void test_authenticated_encryption() {
 }
 
 void test_adaptive_authenticated_encryption() {
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) { Serial.println("Bellek yetersiz (OOM)!"); return; }
     uint32_t start_time = micros();
     Serial.println("\n--- ADAPTIVE PQC HANDSHAKE (KYBER SENSING) ---");
     
@@ -132,21 +138,21 @@ void test_adaptive_authenticated_encryption() {
 
     if (high_security) {
         Serial.println("SENSING: Baglanti mukemmel. Kyber-768 (High Sec) moduna geciliyor.");
-        Kyber768::keypair(&crypto_workspace, crypto_workspace.data.pk, crypto_workspace.data.sk);
-        Kyber768::encaps(&crypto_workspace, crypto_workspace.data.ct, crypto_workspace.data.ss, crypto_workspace.data.pk);
-        ChaCha20::process(encrypted, (const uint8_t*)msg, msg_len, crypto_workspace.data.ss, nonce);
+        Kyber768::keypair(local_ws, local_ws->data.pk, local_ws->data.sk);
+        Kyber768::encaps(local_ws, local_ws->data.ct, local_ws->data.ss, local_ws->data.pk);
+        ChaCha20::process(encrypted, (const uint8_t*)msg, msg_len, local_ws->data.ss, nonce);
         Messenger::send_reliable(PEER_MAC, encrypted, msg_len);
-        Kyber768::decaps(&crypto_workspace, crypto_workspace.data.ss, crypto_workspace.data.ct, crypto_workspace.data.sk);
+        Kyber768::decaps(local_ws, local_ws->data.ss, local_ws->data.ct, local_ws->data.sk);
     } else {
         Serial.println("SENSING: Gurultulu kanal! Kyber-512 (Small/Robust) moduna geciliyor.");
-        Kyber512::keypair(&crypto_workspace, crypto_workspace.data.pk, crypto_workspace.data.sk);
-        Kyber512::encaps(&crypto_workspace, crypto_workspace.data.ct, crypto_workspace.data.ss, crypto_workspace.data.pk);
-        ChaCha20::process(encrypted, (const uint8_t*)msg, msg_len, crypto_workspace.data.ss, nonce);
+        Kyber512::keypair(local_ws, local_ws->data.pk, local_ws->data.sk);
+        Kyber512::encaps(local_ws, local_ws->data.ct, local_ws->data.ss, local_ws->data.pk);
+        ChaCha20::process(encrypted, (const uint8_t*)msg, msg_len, local_ws->data.ss, nonce);
         Messenger::send_reliable(PEER_MAC, encrypted, msg_len);
-        Kyber512::decaps(&crypto_workspace, crypto_workspace.data.ss, crypto_workspace.data.ct, crypto_workspace.data.sk);
+        Kyber512::decaps(local_ws, local_ws->data.ss, local_ws->data.ct, local_ws->data.sk);
     }
     
-    ChaCha20::process(decrypted, encrypted, msg_len, crypto_workspace.data.ss, nonce);
+    ChaCha20::process(decrypted, encrypted, msg_len, local_ws->data.ss, nonce);
     decrypted[msg_len] = '\0';
     
     uint32_t duration = micros() - start_time;
@@ -155,22 +161,26 @@ void test_adaptive_authenticated_encryption() {
 }
 
 void test_kyber() {
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) { Serial.println("Bellek yetersiz (OOM)!"); return; }
     uint32_t t0, t1;
     Serial.println("\n--- [MODULAR] KYBER-512 TEST ---");
     
     t0 = micros();
-    Kyber512::keypair(crypto_workspace.data.pk, crypto_workspace.data.sk);
+    Kyber512::keypair(local_ws->data.pk, local_ws->data.sk);
     t1 = micros();
     Serial.print("KeyGen: "); Serial.print(t1 - t0); Serial.println(" us");
 
-    Kyber512::encaps(&crypto_workspace, crypto_workspace.data.ct, crypto_workspace.data.ss, crypto_workspace.data.pk);
-    Kyber512::decaps(&crypto_workspace, crypto_workspace.data.ss, crypto_workspace.data.ct, crypto_workspace.data.sk);
+    Kyber512::encaps(local_ws, local_ws->data.ct, local_ws->data.ss, local_ws->data.pk);
+    Kyber512::decaps(local_ws, local_ws->data.ss, local_ws->data.ct, local_ws->data.sk);
 
-    if (SecurityOfficer::secure_compare(crypto_workspace.data.ss, crypto_workspace.data.ss, 32)) Serial.println("DURUM: KYBER BASARILI!");
+    if (SecurityOfficer::secure_compare(local_ws->data.ss, local_ws->data.ss, 32)) Serial.println("DURUM: KYBER BASARILI!");
     else Serial.println("DURUM: KYBER HATA!");
 }
 
 void test_dilithium() {
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) { Serial.println("Bellek yetersiz (OOM)!"); return; }
     uint32_t t0, t1;
     Serial.println("\n--- [MODULAR] DILITHIUM-2 TEST ---");
     
@@ -178,12 +188,12 @@ void test_dilithium() {
     size_t siglen;
 
     t0 = micros();
-    Dilithium2::keypair(&crypto_workspace, crypto_workspace.data.pk, crypto_workspace.data.sk); // pk:rho+t1, sk:rho+K+tr+s1+s2+t0
+    Dilithium2::keypair(local_ws, local_ws->data.pk, local_ws->data.sk); // pk:rho+t1, sk:rho+K+tr+s1+s2+t0
     t1 = micros();
     Serial.print("KeyGen: "); Serial.print(t1 - t0); Serial.println(" us");
 
     t0 = micros();
-    Dilithium2::sign(&crypto_workspace, crypto_workspace.data.sig, &siglen, message, sizeof(message), crypto_workspace.data.sk);
+    Dilithium2::sign(local_ws, local_ws->data.sig, &siglen, message, sizeof(message), local_ws->data.sk);
     t1 = micros();
     Serial.print("Sign: "); Serial.print(t1 - t0); Serial.println(" us");
     
@@ -191,6 +201,8 @@ void test_dilithium() {
 }
 
 void test_persistent_vault() {
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) { Serial.println("Bellek yetersiz (OOM)!"); return; }
     Serial.println("\n--- KEYVAULT (PERSISTENT SECURE STORAGE) TEST ---");
     
     uint8_t original_ss[32] = {0x01, 0x02, 0x47, 0x55, 0x4D, 0x55, 0x53, 0}; // 'GUMUS' seed
@@ -210,12 +222,14 @@ void test_persistent_vault() {
 }
 
 void test_ota_verification() {
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) { Serial.println("Bellek yetersiz (OOM)!"); return; }
     Serial.println("\n--- [OTA SECURITY] POST-QUANTUM FIRMWARE VERIFICATION ---");
     
     // 1. Root Keypair Üret (Üretici tarafı)
     uint8_t root_pk[1312];
     uint8_t root_sk[2528];
-    Dilithium2::keypair(&crypto_workspace, root_pk, root_sk);
+    Dilithium2::keypair(local_ws, root_pk, root_sk);
     OTAGuard::set_root_pk(root_pk); // Cihaza Root PK'yı göm
     
     // 2. Yeni Yazılım ve İmza Hazırla (Update Server tarafı)
@@ -224,7 +238,7 @@ void test_ota_verification() {
     uint8_t update_blob[2420 + 64]; // [Signature] + [Firmware]
     size_t sig_len = 0;
     
-    Dilithium2::sign(&crypto_workspace, update_blob, &sig_len, (const uint8_t*)new_firmware, fw_len, root_sk);
+    Dilithium2::sign(local_ws, update_blob, &sig_len, (const uint8_t*)new_firmware, fw_len, root_sk);
     memcpy(update_blob + 2420, new_firmware, fw_len);
     
     // 3. Yazılımı Doğrula (Cihaz tarafı)
@@ -236,18 +250,20 @@ void test_ota_verification() {
 }
 
 void test_pq_handshake() {
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) { Serial.println("Bellek yetersiz (OOM)!"); return; }
     using namespace PQC::Security;
     Serial.println("\n--- [TRUST CHAIN] POST-QUANTUM DEVICE HANDSHAKE ---");
 
     // 1. Admin Tarafı: Root Keypair Hazırla
     uint8_t admin_pk[1312], admin_sk[2528];
-    Dilithium2::keypair(&crypto_workspace, admin_pk, admin_sk);
+    Dilithium2::keypair(local_ws, admin_pk, admin_sk);
     PQC::System::KeyVault::save_admin_pk(admin_pk); // Root PK'yı sisteme işle
     
     // 2. Yeni Cihaz Tarafı: Kendi Kimliğini Üret
     uint8_t new_pk[1312], new_sk[2528];
     uint8_t new_mac[6] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
-    Dilithium2::keypair(&crypto_workspace, new_pk, new_sk);
+    Dilithium2::keypair(local_ws, new_pk, new_sk);
     
     // 3. Handshake: Admin Sertifika Düzenler (İmza)
     uint8_t trust_token[2420];
@@ -265,6 +281,8 @@ void test_pq_handshake() {
 }
 
 void test_anti_tamper() {
+    ScopedWorkspace local_ws;
+    if (!local_ws.ws) { Serial.println("Bellek yetersiz (OOM)!"); return; }
     using namespace PQC::Security;
     Serial.println("\n--- [SECURITY] ANTI-TAMPER & PANIC WIPE TEST ---");
 
