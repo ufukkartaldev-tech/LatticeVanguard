@@ -98,11 +98,11 @@ public:
     static int get_last_retry_count();
     static bool is_blacklisted(const uint8_t* mac);
 
-private:
     static void handle_blacklist(const uint8_t* mac, bool success);
     static bool check_replay(const uint8_t* mac, uint32_t msg_id);
     static bool compute_hmac(uint8_t* out, const uint8_t* data, size_t len, const uint8_t* key);
     static bool ring_buffer_write(const uint8_t* data, size_t len);
+    static void send_ack(const uint8_t* mac, uint32_t msg_id, uint8_t seq);
 };
 
 } // namespace Network

@@ -22,6 +22,13 @@ static SemaphoreHandle_t ring_buffer_mutex = NULL;
 static SemaphoreHandle_t hmac_mutex = NULL;
 static portMUX_TYPE ring_buffer_spinlock = portMUX_INITIALIZER_UNLOCKED;
 static QueueHandle_t network_queue = NULL;
+static QueueHandle_t recv_queue = NULL;
+
+struct raw_packet_t {
+    uint8_t mac[6];
+    uint8_t data[250];
+    int len;
+};
 
 static peer_record_t peer_registry[MAX_PEERS];
 static blacklist_t blacklist[MAX_PEERS];
@@ -71,6 +78,7 @@ bool Messenger::init() {
     }
 
     network_queue = xQueueCreate(2, sizeof(network_msg_t));
+    recv_queue = xQueueCreate(10, sizeof(raw_packet_t));
     xTaskCreatePinnedToCore(network_task, "NetTask", 4096, NULL, 5, NULL, 0); 
     xTaskCreatePinnedToCore(crypto_task, "CryptoTask", 4096, NULL, 4, NULL, 1);
     
@@ -181,44 +189,17 @@ bool Messenger::check_replay(const uint8_t* mac, uint32_t msg_id) {
 }
 
 void Messenger::on_data_recv(const uint8_t* mac, const uint8_t* incomingData, int len) {
-    if (len < (int)sizeof(fragment_packet_t)) return;
-    if (is_blacklisted(mac)) return;
-
-    fragment_packet_t* pkt = (fragment_packet_t*)incomingData;
+    if (len < (int)sizeof(fragment_packet_t) || len > 250) return;
     
-    // 2. CRYPTOGRAPHIC FIREWALL (HMAC Check)
-    uint8_t calculated_hmac[32];
-    if (!compute_hmac(calculated_hmac, (const uint8_t*)pkt, 250 - 32, HMAC_SECRET)) {
-        ESP_LOGE("PQC_NETWORK", "HMAC was dropped due to mutex timeout!");
-        return;
-    }
+    // Yüksek öncelikli ISR / WiFi System Task bağlamı. 
+    // Mutex (xSemaphoreTake) beklemesi yapmadan veriyi kuyruğa atıp çıkıyoruz.
+    raw_packet_t raw;
+    memcpy(raw.mac, mac, 6);
+    memcpy(raw.data, incomingData, len);
+    raw.len = len;
 
-    if (!SecurityOfficer::secure_compare(pkt->hmac, calculated_hmac, 32)) {
-        handle_blacklist(mac, false);
-        return; 
-    }
-
-    packet_header_t header;
-    uint8_t* payload = network_workspace.packet_buffer; 
-
-    if (!NetworkPrivacy::unwrap(&header, payload, pkt)) {
-        handle_blacklist(mac, false);
-        return;
-    }
-
-    if (!check_replay(mac, header.msg_id)) return;
-
-    handle_blacklist(mac, true);
-
-    if (header.type == MSG_ACK) { ack_received = true; return; }
-
-    if (header.type == MSG_DATA) {
-        uint16_t p_len = header.payload_len;
-        if (Messenger::ring_buffer_write((uint8_t*)&p_len, 2)) {
-            Messenger::ring_buffer_write(payload, p_len);
-            Messenger::send_ack(mac, header.msg_id, header.seq);
-        }
-    }
+    // Kuyruğa atılmazsa veri düşer (DOS / Flood koruması)
+    xQueueSendFromISR(recv_queue, &raw, NULL);
 }
 
 bool Messenger::send_reliable(const uint8_t* peer_mac, const uint8_t* data, size_t len) {
@@ -289,9 +270,44 @@ void network_task(void* pvParameters) {
 }
 
 void crypto_task(void* pvParameters) {
+    raw_packet_t raw;
     uint8_t* work_ptr = network_workspace.encryption_buffer; 
     size_t work_len;
     while (true) {
+        // Gelen paketlerin kuyruktan alınıp rahatça (Mutex engeli olmadan WiFi Task'ı bekletmeden) işlenmesi
+        if (xQueueReceive(recv_queue, &raw, 10 / portTICK_PERIOD_MS) == pdPASS) {
+            if (!Messenger::is_blacklisted(raw.mac)) {
+                fragment_packet_t* pkt = (fragment_packet_t*)raw.data;
+                
+                // 2. CRYPTOGRAPHIC FIREWALL (HMAC Check) - Burada güvenle Mutex alınıyor
+                uint8_t calculated_hmac[32];
+                if (!Messenger::compute_hmac(calculated_hmac, (const uint8_t*)pkt, 250 - 32, HMAC_SECRET)) {
+                    ESP_LOGE("PQC_NETWORK", "HMAC was dropped due to mutex timeout!");
+                } else if (!SecurityOfficer::secure_compare(pkt->hmac, calculated_hmac, 32)) {
+                    Messenger::handle_blacklist(raw.mac, false);
+                } else {
+                    packet_header_t header;
+                    uint8_t* payload = network_workspace.packet_buffer; 
+
+                    if (!NetworkPrivacy::unwrap(&header, payload, pkt)) {
+                        Messenger::handle_blacklist(raw.mac, false);
+                    } else if (Messenger::check_replay(raw.mac, header.msg_id)) {
+                        Messenger::handle_blacklist(raw.mac, true);
+
+                        if (header.type == MSG_ACK) { 
+                            ack_received = true; 
+                        } else if (header.type == MSG_DATA) {
+                            uint16_t p_len = header.payload_len;
+                            if (Messenger::ring_buffer_write((uint8_t*)&p_len, 2)) {
+                                Messenger::ring_buffer_write(payload, p_len);
+                                Messenger::send_ack(raw.mac, header.msg_id, header.seq);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (Messenger::ring_buffer_has_data()) {
             work_len = RING_BUFFER_SIZE;
             if (Messenger::ring_buffer_read(work_ptr, &work_len)) {
@@ -299,7 +315,6 @@ void crypto_task(void* pvParameters) {
                 memset(work_ptr, 0, work_len);
             }
         }
-        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
