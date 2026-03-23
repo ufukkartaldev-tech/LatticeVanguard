@@ -159,16 +159,18 @@ int Kyber512::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     // 3. Secure Constant-time check
     bool fail = !Security::SecurityOfficer::secure_compare(ct, ct_re, KYBER_512_CIPHERTEXTBYTES);
     
+    sha3_256(kr + 32, ct, KYBER_512_CIPHERTEXTBYTES);
+    
     if (fail) {
         // Safe Reject: Generate pseudo-random SS from context to prevent info leakage
         uint8_t reject_buf[64];
         memcpy(reject_buf, z, 32);
-        memcpy(reject_buf + 32, ct, 32);
+        memcpy(reject_buf + 32, kr + 32, 32);
         sha3_256(ss, reject_buf, 64);
     } else {
         // Success: Shared Secret is already in ss from the encaps call (simplified)
         // In real FO, it comes from kr[0..31]
-        memcpy(ss, kr, 32);
+        sha3_256(ss, kr, 64);
     }
 
     return 0;
@@ -304,13 +306,15 @@ int Kyber768::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
 
     bool fail = !Security::SecurityOfficer::secure_compare(ct, ct_re, KYBER_768_CIPHERTEXTBYTES);
     
+    sha3_256(kr + 32, ct, KYBER_768_CIPHERTEXTBYTES);
+    
     if (fail) {
         uint8_t reject_buf[64];
         memcpy(reject_buf, z, 32);
-        memcpy(reject_buf + 32, ct, 32);
+        memcpy(reject_buf + 32, kr + 32, 32);
         sha3_256(ss, reject_buf, 64);
     } else {
-        memcpy(ss, kr, 32);
+        sha3_256(ss, kr, 64);
     }
     return 0;
 }

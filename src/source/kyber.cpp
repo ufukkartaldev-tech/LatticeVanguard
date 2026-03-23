@@ -196,7 +196,7 @@ int kyber512_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const u
     if (fail) {
         uint8_t reject_buf[64];
         memcpy(reject_buf, z, 32);
-        memcpy(reject_buf + 32, ct, 32);
+        memcpy(reject_buf + 32, kr + 32, 32);
         sha3_256(ss, reject_buf, 64);
     } else {
         sha3_256(ss, kr, 64);
@@ -252,7 +252,7 @@ int kyber768_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const u
     if (fail) {
         uint8_t reject_buf[64];
         memcpy(reject_buf, z, 32);
-        memcpy(reject_buf + 32, ct, 32);
+        memcpy(reject_buf + 32, kr + 32, 32);
         sha3_256(ss, reject_buf, 64);
     } else {
         sha3_256(ss, kr, 64);
