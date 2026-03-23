@@ -2,6 +2,7 @@
 #include "../include/encryption.h"
 #include "../include/fips202.h"
 #include "../include/security.h"
+#include "../include/csprng.h"
 #include <string.h>
 
 #ifdef ARDUINO
@@ -54,7 +55,7 @@ void KeyVault::generate_master_key() {
         if (nvs_open("pqc_sys", NVS_READWRITE, &nvs_handle) == ESP_OK) {
             size_t salt_len = 32;
             if (nvs_get_blob(nvs_handle, "vault_salt", secret_salt, &salt_len) != ESP_OK) {
-                for(int i=0; i<32; i++) secret_salt[i] = (uint8_t)esp_random();
+                PQC::System::CSPRNG::randombytes(secret_salt, 32);
                 nvs_set_blob(nvs_handle, "vault_salt", secret_salt, 32);
                 nvs_commit(nvs_handle);
             }
@@ -81,11 +82,7 @@ bool KeyVault::save_key(const char* key_name, const uint8_t* key_data, size_t le
     // 1. Şifreleme (Encryption)
     // Şifreli veri yapısı: [IV (12)] | [TAG (16)] | [CIPHERTEXT (len)]
     uint8_t iv[12];
-    #ifdef ARDUINO
-    for(int i=0; i<12; i++) iv[i] = (uint8_t)esp_random();
-    #else
-    for(int i=0; i<12; i++) iv[i] = (uint8_t)rand();
-    #endif
+    PQC::System::CSPRNG::randombytes(iv, 12);
 
     uint8_t tag[16];
     uint8_t* encrypted_blob = (uint8_t*)malloc(len + 12 + 16);

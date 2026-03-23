@@ -1,6 +1,7 @@
 #include "../include/health.h"
 #include "../include/pqc_config.h"
 #include <string.h>
+#include "../include/csprng.h"
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -42,10 +43,7 @@ void HealthMonitor::print_performance_table() {
 // Shannon Entropisi: Rastgelelik Kalite Testi (Gümüshane Usulü Zar Kontrolü)
 float HealthMonitor::check_rng_entropy() {
     uint8_t buffer[128]; // 1024 bit örneklem
-    for(int i=0; i<32; i++) {
-        uint32_t r = esp_random();
-        memcpy(buffer + (i*4), &r, 4);
-    }
+    PQC::System::CSPRNG::randombytes(buffer, 128);
     
     float entropy = calculate_shannon_entropy(buffer, 128);
     // Maksimum entropi 8.0 bit/byte'dır. 0.0-1.0 arasına normalize ederken 8'e bölüyoruz.

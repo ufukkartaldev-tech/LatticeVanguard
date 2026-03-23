@@ -1,6 +1,7 @@
 #include <string.h>
 #include "../include/encryption.h"
 #include "../include/fips202.h"
+#include "../include/csprng.h"
 
 #ifdef ARDUINO
 #include "mbedtls/gcm.h"
@@ -134,19 +135,17 @@ void Nonce::generate(uint8_t iv[12], uint32_t counter) {
     // 1. Packet Counter (Sıralama takibi için)
     memcpy(iv, &counter, 4);
 
-    #ifdef ARDUINO
-    // 2. Hardware-Backed Entropy Priority
-    // Donanım RNG'si her zaman ilk 4 baytı XOR'layarak manipülasyonu engellemelidir.
-    uint32_t hw_rng = esp_random();
+    // 2. Algorithmic Entropy Priority
+    // HMAC_DRBG RNG'si ilk 4 baytı XOR'layarak manipülasyonu engellemelidir.
+    uint8_t rand_buf[12];
+    PQC::System::CSPRNG::randombytes(rand_buf, 12);
+    
     for (int i = 0; i < 4; i++) {
-        iv[i] ^= (uint8_t)(hw_rng >> (i * 8));
+        iv[i] ^= rand_buf[i];
     }
     
-    // 3. Kalan 8 baytı tamamen donanım entropisi ile doldur.
-    for(int i=4; i<12; i++) iv[i] = (uint8_t)esp_random();
-    #else
-    for(int i=4; i<12; i++) iv[i] = (uint8_t)rand();
-    #endif
+    // 3. Kalan 8 baytı tamamen entropi ile doldur.
+    for(int i=4; i<12; i++) iv[i] = rand_buf[i];
 }
 
 } // namespace Symmetric

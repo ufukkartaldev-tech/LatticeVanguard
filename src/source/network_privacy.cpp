@@ -1,6 +1,5 @@
 #ifndef ARDUINO
 #include <stdio.h>
-#define esp_random() rand()
 #endif
 
 #include "../include/network_privacy.h"

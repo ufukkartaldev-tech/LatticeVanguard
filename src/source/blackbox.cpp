@@ -4,10 +4,9 @@
 #ifdef ARDUINO
 #include <Arduino.h>
 #include <FS.h>
-#include <LittleFS.h>
-
 #include "../include/encryption.h"
 #include "../include/storage.h"
+#include "../include/csprng.h"
 
 namespace PQC {
 namespace System {
@@ -34,7 +33,7 @@ void BlackBox::log_security_incident(const char* type, const uint8_t* mac) {
     }
 
     uint8_t iv[12];
-    for(int i=0; i<12; i++) iv[i] = (uint8_t)esp_random();
+    PQC::System::CSPRNG::randombytes(iv, 12);
     uint8_t tag[16], cipher[128], master[32];
     size_t len = strlen(plain);
 
@@ -57,7 +56,7 @@ void BlackBox::log_error(const char* operation, uint32_t iteration, size_t leak_
     snprintf(plain_text, sizeof(plain_text), "[FATAL] Op:%s | It:%u | Leak:%zu", operation, iteration, leak_amount);
     
     uint8_t iv[12];
-    for(int i=0; i<12; i++) iv[i] = (uint8_t)esp_random();
+    PQC::System::CSPRNG::randombytes(iv, 12);
     uint8_t tag[16], cipher[128], master[32];
     size_t plain_len = strlen(plain_text);
     

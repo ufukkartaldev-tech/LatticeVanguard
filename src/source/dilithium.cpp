@@ -25,16 +25,10 @@ namespace DSA {
     for (size_t _w = 0; _w < (size); _w++) _p[_w] = 0; \
 } while (0)
 
-#ifdef ARDUINO
-#include <Arduino.h>
-#define DSA_RANDOM(buf, len) for(size_t _i=0; _i<len; ++_i) buf[_i] = (uint8_t)esp_random()
-#else
-#include <stdlib.h>
-static void trng_random(uint8_t* buf, size_t len) {
-    for(size_t i=0; i<len; i++) buf[i] = (uint8_t)(rand() & 0xFF);
-}
-#define DSA_RANDOM(buf, len) trng_random(buf, len)
-#endif
+#include "../include/csprng.h"
+
+// Generate secure random entropy using MbedTLS HMAC_DRBG
+#define DSA_RANDOM(buf, len) PQC::System::CSPRNG::randombytes((uint8_t*)(buf), (size_t)(len))
 
 // --- ARITHMETIC UTILITIES ---
 

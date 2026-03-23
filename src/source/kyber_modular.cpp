@@ -10,14 +10,10 @@ using namespace PQC::Memory;
 namespace PQC {
 namespace KEM {
 
-// ESP32 Random
-#ifdef ARDUINO
-#include <Arduino.h>
-#define KEM_RANDOM(ptr, len) do { uint8_t* _p = (uint8_t*)(ptr); for(size_t _i=0; _i<len; _i++) _p[_i] = (uint8_t)esp_random(); } while(0)
-#else
-#include <stdlib.h>
-#define KEM_RANDOM(ptr, len) do { uint8_t* _p = (uint8_t*)(ptr); for(size_t _i=0; _i<len; _i++) _p[_i] = (uint8_t)rand(); } while(0)
-#endif
+#include "../include/csprng.h"
+
+// Generate secure random entropy using MbedTLS HMAC_DRBG
+#define KEM_RANDOM(ptr, len) PQC::System::CSPRNG::randombytes((uint8_t*)(ptr), (size_t)(len))
 
 void KyberBase::gen_matrix_row(polyvec *a_row, const uint8_t seed[32], int row_idx, int k, int transposed) {
     for (int j = 0; j < k; j++) {

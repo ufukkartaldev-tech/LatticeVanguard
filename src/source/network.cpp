@@ -3,6 +3,7 @@
 #include "../include/encryption.h"
 #include "../include/fips202.h"
 #include "../include/blackbox.h"
+#include "../include/csprng.h"
 #include <string.h>
 
 #ifdef ARDUINO
@@ -64,11 +65,7 @@ bool Messenger::init() {
 
     // Hardcoded anahtar temizliği ve eFuse/NVS tabanlı mimari
     if (!KeyVault::load_key("hmac_secret", HMAC_SECRET, 32)) {
-#ifdef ARDUINO
-        esp_fill_random(HMAC_SECRET, 32);
-#else
-        for (int i = 0; i < 32; i++) HMAC_SECRET[i] = (uint8_t)(rand() & 0xFF);
-#endif
+        PQC::System::CSPRNG::randombytes(HMAC_SECRET, 32);
         KeyVault::save_key("hmac_secret", HMAC_SECRET, 32);
         ESP_LOGW("PQC_NETWORK", "HMAC_SECRET not found in NVS! Generated and securely stored a new random key.");
     }
