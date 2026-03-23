@@ -41,7 +41,7 @@ static uint8_t HMAC_SECRET[32] = {0}; // Silinen Hardcoded Key (System::KeyVault
 struct network_msg_t {
     uint8_t target_mac[6];
     uint8_t final_mac[6];
-    uint8_t data[4096];
+    uint8_t* data;
     size_t len;
 };
 
@@ -77,7 +77,7 @@ bool Messenger::init() {
         ESP_LOGW("PQC_NETWORK", "HMAC_SECRET not found in NVS! Generated and securely stored a new random key.");
     }
 
-    network_queue = xQueueCreate(2, sizeof(network_msg_t));
+    network_queue = xQueueCreate(10, sizeof(network_msg_t*));
     recv_queue = xQueueCreate(10, sizeof(raw_packet_t));
     xTaskCreatePinnedToCore(network_task, "NetTask", 4096, NULL, 5, NULL, 0); 
     xTaskCreatePinnedToCore(crypto_task, "CryptoTask", 4096, NULL, 4, NULL, 1);
@@ -204,13 +204,25 @@ void Messenger::on_data_recv(const uint8_t* mac, const uint8_t* incomingData, in
 
 bool Messenger::send_reliable(const uint8_t* peer_mac, const uint8_t* data, size_t len) {
     if (len > 4096) return false;
-    network_msg_t next_msg;
-    memcpy(next_msg.target_mac, peer_mac, 6);
-    memcpy(next_msg.final_mac, peer_mac, 6);
-    memcpy(next_msg.data, data, len);
-    next_msg.len = len;
+    network_msg_t* next_msg = (network_msg_t*)malloc(sizeof(network_msg_t));
+    if (!next_msg) return false;
+    
+    next_msg->data = (uint8_t*)malloc(len);
+    if (!next_msg->data) {
+        free(next_msg);
+        return false;
+    }
+    
+    memcpy(next_msg->target_mac, peer_mac, 6);
+    memcpy(next_msg->final_mac, peer_mac, 6);
+    memcpy(next_msg->data, data, len);
+    next_msg->len = len;
     global_msg_id++;
+    
     if (xQueueSend(network_queue, &next_msg, 0) == pdPASS) return true;
+    
+    free(next_msg->data);
+    free(next_msg);
     return false;
 }
 
@@ -230,26 +242,26 @@ void Messenger::send_ack(const uint8_t* mac, uint32_t msg_id, uint8_t seq) {
 }
 
 void network_task(void* pvParameters) {
-    network_msg_t m;
+    network_msg_t* m;
     packet_header_t h;
     fragment_packet_t p;
 
     while (true) {
         if (xQueueReceive(network_queue, &m, portMAX_DELAY) == pdPASS) {
             messenger_busy = true;
-            int total = (m.len + PQC_PAYLOAD_SIZE - 1) / PQC_PAYLOAD_SIZE;
+            int total = (m->len + PQC_PAYLOAD_SIZE - 1) / PQC_PAYLOAD_SIZE;
             
             for (uint8_t i = 0; i < total; i++) {
-                size_t c_len = (m.len - (i * PQC_PAYLOAD_SIZE) < PQC_PAYLOAD_SIZE) ? 
-                                m.len - (i * PQC_PAYLOAD_SIZE) : PQC_PAYLOAD_SIZE;
+                size_t c_len = (m->len - (i * PQC_PAYLOAD_SIZE) < PQC_PAYLOAD_SIZE) ? 
+                                m->len - (i * PQC_PAYLOAD_SIZE) : PQC_PAYLOAD_SIZE;
                 h.type = MSG_DATA;
-                memcpy(h.final_dest, m.final_mac, 6); 
+                memcpy(h.final_dest, m->final_mac, 6); 
                 h.msg_id = global_msg_id;
                 h.seq = i;
                 h.total = total;
                 h.payload_len = (uint8_t)c_len;
                 
-                NetworkPrivacy::wrap(&p, &h, m.data + (i * PQC_PAYLOAD_SIZE), c_len);
+                NetworkPrivacy::wrap(&p, &h, m->data + (i * PQC_PAYLOAD_SIZE), c_len);
                 
                 if (!Messenger::compute_hmac(p.hmac, (const uint8_t*)&p, 250 - 32, HMAC_SECRET)) {
                     ESP_LOGE("PQC_NETWORK", "Cannot compute HMAC for MSG_DATA!");
@@ -258,12 +270,14 @@ void network_task(void* pvParameters) {
 
                 for (int r = 0; r < 3; r++) {
                     ack_received = false;
-                    esp_now_send(m.target_mac, (uint8_t*)&p, sizeof(p));
+                    esp_now_send(m->target_mac, (uint8_t*)&p, sizeof(p));
                     uint32_t s = millis();
                     while (millis() - s < 250) { if (ack_received) break; vTaskDelay(1); }
                     if (ack_received) break;
                 }
             }
+            free(m->data);
+            free(m);
             messenger_busy = false;
         }
     }
