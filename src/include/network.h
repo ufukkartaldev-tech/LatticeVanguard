@@ -24,7 +24,7 @@ namespace Network {
 #define RING_BUFFER_SIZE 16384
 #define RING_BUFFER_MASK (RING_BUFFER_SIZE - 1)
 #define MAX_FRAGMENTS 32
-#define MAX_PEERS 8
+#define MAX_PEERS 256
 #define WINDOW_SIZE 64      // Sliding window size (bits)
 
 enum PacketType { MSG_DATA = 0, MSG_ACK = 1, MSG_HANDSHAKE_REQ = 2, MSG_HANDSHAKE_CERT = 3, MSG_AUTH = 4, MSG_NACK = 5 };

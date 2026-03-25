@@ -144,57 +144,64 @@ bool Messenger::compute_hmac(uint8_t* out, const uint8_t* hmac_input, size_t len
     return true;
 }
 
+static inline uint32_t get_mac_hash(const uint8_t* mac) {
+    // Ultra-Fast O(1) MAC Hashing (Sabit hesaplama, Döngü yok)
+    // DoS / CPU Exhaustion saldırılarını O(1) zaman ile kırmak için
+    uint32_t hash = 5381;
+    hash = ((hash << 5) + hash) ^ mac[0];
+    hash = ((hash << 5) + hash) ^ mac[1];
+    hash = ((hash << 5) + hash) ^ mac[2];
+    hash = ((hash << 5) + hash) ^ mac[3];
+    hash = ((hash << 5) + hash) ^ mac[4];
+    hash = ((hash << 5) + hash) ^ mac[5];
+    return hash % MAX_PEERS;
+}
+
 bool Messenger::is_blacklisted(const uint8_t* mac) {
-    for (int i = 0; i < MAX_PEERS; i++) {
-        if (memcmp(blacklist[i].mac, mac, 6) == 0) {
-            if (millis() < blacklist[i].expiry) return true;
-            memset(&blacklist[i], 0, sizeof(blacklist_t));
-            return false;
+    uint32_t idx = get_mac_hash(mac); // O(1) Lookup
+    if (blacklist[idx].failures > 0 || blacklist[idx].expiry > 0) {
+        if (memcmp(blacklist[idx].mac, mac, 6) == 0) {
+            if (millis() < blacklist[idx].expiry) return true;
+            memset(&blacklist[idx], 0, sizeof(blacklist_t));
         }
     }
     return false;
 }
 
 void Messenger::handle_blacklist(const uint8_t* mac, bool success) {
+    uint32_t idx = get_mac_hash(mac);
     if (success) {
-        for (int i = 0; i < MAX_PEERS; i++) {
-            if (memcmp(blacklist[i].mac, mac, 6) == 0) { blacklist[i].failures = 0; return; }
+        if (memcmp(blacklist[idx].mac, mac, 6) == 0) {
+            blacklist[idx].failures = 0;
+            blacklist[idx].expiry = 0;
         }
     } else {
-        // ADAPTIVE RATE LIMITING: 3 hata yapan MAC'e 60 saniye engel.
-        // Brute-force ve DoS saldırganlarını CPU'yu yormadan sistemden dışlar.
-        for (int i = 0; i < MAX_PEERS; i++) {
-            if (memcmp(blacklist[i].mac, mac, 6) == 0 || (blacklist[i].expiry == 0 && blacklist[i].failures == 0)) {
-                memcpy(blacklist[i].mac, mac, 6);
-                blacklist[i].failures++;
-                if (blacklist[i].failures >= 3) {
-                    blacklist[i].expiry = millis() + 60000;
-                    PQC::System::BlackBox::log_security_incident("MAC_BLACKLISTED", mac);
-                }
-                return;
-            }
+        // O(1) Direct Map (Collision handled by overwrite since it's an ephemeral firewall)
+        if (memcmp(blacklist[idx].mac, mac, 6) != 0) {
+            memcpy(blacklist[idx].mac, mac, 6);
+            blacklist[idx].failures = 0;
+            blacklist[idx].expiry = 0;
+        }
+        
+        blacklist[idx].failures++;
+        if (blacklist[idx].failures >= 3) {
+            blacklist[idx].expiry = millis() + 60000;
+            PQC::System::BlackBox::log_security_incident("MAC_BLACKLISTED", mac);
         }
     }
 }
 
 bool Messenger::check_replay(const uint8_t* mac, uint32_t msg_id) {
-    // SLIDING WINDOW ANTI-REPLAY: Her peer için msg_id takibi.
-    peer_record_t* peer = NULL;
-    for (int i = 0; i < MAX_PEERS; i++) {
-        if (memcmp(peer_registry[i].mac, mac, 6) == 0) { peer = &peer_registry[i]; break; }
-    }
+    uint32_t idx = get_mac_hash(mac); // O(1) Cache Address
+    peer_record_t* peer = &peer_registry[idx];
 
-    if (!peer) {
-        for (int i = 0; i < MAX_PEERS; i++) {
-            if (peer_registry[i].last_seen == 0) {
-                peer = &peer_registry[i];
-                memcpy(peer->mac, mac, 6);
-                peer->last_msg_id = msg_id;
-                peer->window = 1;
-                peer->last_seen = millis();
-                return true;
-            }
-        }
+    // Sabit zamanda (O(1)) Anti-Replay kontrolü
+    if (memcmp(peer->mac, mac, 6) != 0) {
+        // Yeni bir peer (veya hash çarpışması) - Yapıyı yeniden ayarla
+        memcpy(peer->mac, mac, 6);
+        peer->last_msg_id = msg_id;
+        peer->window = 1;
+        peer->last_seen = millis();
         return true; 
     }
 
