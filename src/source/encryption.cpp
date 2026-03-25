@@ -129,23 +129,18 @@ void KDF::derive_keys(uint8_t chacha_key[32], uint8_t aes_key[32], const uint8_t
 void Nonce::generate(uint8_t iv[12], uint32_t counter) {
     // SİBER SAVUNMA: Nonce-Reuse & Replay Protection
     // AES-GCM şifrelemesinde aynı Nonce (IV) değerinin iki kez kullanılması tüm gizliliği yok eder.
-    // 'Hybrid Nonce' kullanarak hem donanım tabanlı rastgelelik (Hardware RNG) sağlıyoruz 
-    // hem de karşı tarafın paket sırasını (counter) doğrulamasına izin veriyoruz.
+    // 'Hybrid Nonce' kullanarak hem karşı tarafın paket sırasını (counter) doğrulamasına izin veriyoruz
+    // hem de kalan baytlara rastgelelik katıyoruz (Hardware RNG).
     
-    // 1. Packet Counter (Sıralama takibi için)
+    // 1. Packet Counter (Sıralama takibi için salt/açık bırakılmalı)
     memcpy(iv, &counter, 4);
 
-    // 2. Algorithmic Entropy Priority
-    // HMAC_DRBG RNG'si ilk 4 baytı XOR'layarak manipülasyonu engellemelidir.
-    uint8_t rand_buf[12];
-    PQC::System::CSPRNG::randombytes(rand_buf, 12);
-    
-    for (int i = 0; i < 4; i++) {
-        iv[i] ^= rand_buf[i];
+    // 2. Kalan 8 baytı tamamen entropi ile doldur.
+    uint8_t rand_buf[8];
+    PQC::System::CSPRNG::randombytes(rand_buf, 8);
+    for(int i=0; i<8; i++) {
+        iv[4+i] = rand_buf[i];
     }
-    
-    // 3. Kalan 8 baytı tamamen entropi ile doldur.
-    for(int i=4; i<12; i++) iv[i] = rand_buf[i];
 }
 
 } // namespace Symmetric
