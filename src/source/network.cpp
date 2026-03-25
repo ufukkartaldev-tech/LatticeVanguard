@@ -22,6 +22,18 @@ static SemaphoreHandle_t hmac_mutex = NULL;
 static QueueHandle_t network_queue = NULL;
 static QueueHandle_t recv_queue = NULL;
 
+#define RECV_POOL_SIZE 10
+static raw_packet_t recv_pool[RECV_POOL_SIZE];
+static QueueHandle_t free_recv_queue = NULL;
+
+#define SEND_POOL_SIZE 5
+struct network_msg_buffer_t {
+    network_msg_t msg;
+    uint8_t payload[4096];
+};
+static network_msg_buffer_t send_pool[SEND_POOL_SIZE];
+static QueueHandle_t free_send_queue = NULL;
+
 struct raw_packet_t {
     uint8_t mac[6];
     uint8_t data[250];
@@ -33,7 +45,9 @@ static blacklist_t blacklist[MAX_PEERS];
 static uint32_t global_msg_id = 1000;
 static volatile bool messenger_busy = false;
 static volatile bool last_send_ok = false;
-static volatile bool ack_received = false;
+static TaskHandle_t network_task_handle = NULL;
+static volatile uint32_t expected_ack_id = 0;
+static volatile uint8_t expected_ack_seq = 0;
 
 static uint8_t LOCAL_MAC[6];
 static uint8_t HMAC_SECRET[32] = {0}; // Silinen Hardcoded Key (System::KeyVault üzerinden NVS'ten yüklenecek)
@@ -77,9 +91,21 @@ bool Messenger::init() {
         ESP_LOGW("PQC_NETWORK", "HMAC_SECRET not found in NVS! Generated and securely stored a new random key.");
     }
 
-    network_queue = xQueueCreate(10, sizeof(network_msg_t*));
-    recv_queue = xQueueCreate(10, sizeof(raw_packet_t));
-    xTaskCreatePinnedToCore(network_task, "NetTask", 4096, NULL, 5, NULL, 0); 
+    free_recv_queue = xQueueCreate(RECV_POOL_SIZE, sizeof(raw_packet_t*));
+    for (int i = 0; i < RECV_POOL_SIZE; i++) {
+        raw_packet_t* ptr = &recv_pool[i];
+        xQueueSend(free_recv_queue, &ptr, 0);
+    }
+    recv_queue = xQueueCreate(RECV_POOL_SIZE, sizeof(raw_packet_t*));
+
+    free_send_queue = xQueueCreate(SEND_POOL_SIZE, sizeof(network_msg_buffer_t*));
+    for (int i = 0; i < SEND_POOL_SIZE; i++) {
+        network_msg_buffer_t* ptr = &send_pool[i];
+        ptr->msg.data = ptr->payload;
+        xQueueSend(free_send_queue, &ptr, 0);
+    }
+    network_queue = xQueueCreate(SEND_POOL_SIZE, sizeof(network_msg_buffer_t*));
+    xTaskCreatePinnedToCore(network_task, "NetTask", 4096, NULL, 5, &network_task_handle, 0); 
     xTaskCreatePinnedToCore(crypto_task, "CryptoTask", 4096, NULL, 4, NULL, 1);
     
     return true;
@@ -193,36 +219,33 @@ void Messenger::on_data_recv(const uint8_t* mac, const uint8_t* incomingData, in
     
     // Yüksek öncelikli ISR / WiFi System Task bağlamı. 
     // Mutex (xSemaphoreTake) beklemesi yapmadan veriyi kuyruğa atıp çıkıyoruz.
-    raw_packet_t raw;
-    memcpy(raw.mac, mac, 6);
-    memcpy(raw.data, incomingData, len);
-    raw.len = len;
+    raw_packet_t* raw_ptr = NULL;
+    if (xQueueReceiveFromISR(free_recv_queue, &raw_ptr, NULL) == pdPASS) {
+        memcpy(raw_ptr->mac, mac, 6);
+        memcpy(raw_ptr->data, incomingData, len);
+        raw_ptr->len = len;
 
-    // Kuyruğa atılmazsa veri düşer (DOS / Flood koruması)
-    xQueueSendFromISR(recv_queue, &raw, NULL);
+        // Kuyruğa atılmazsa veri düşer (DOS / Flood koruması)
+        if (xQueueSendFromISR(recv_queue, &raw_ptr, NULL) != pdPASS) {
+            xQueueSendFromISR(free_recv_queue, &raw_ptr, NULL);
+        }
+    }
 }
 
 bool Messenger::send_reliable(const uint8_t* peer_mac, const uint8_t* data, size_t len) {
     if (len > 4096) return false;
-    network_msg_t* next_msg = (network_msg_t*)malloc(sizeof(network_msg_t));
-    if (!next_msg) return false;
+    network_msg_buffer_t* next_buf = NULL;
+    if (xQueueReceive(free_send_queue, &next_buf, 0) != pdPASS) return false; // Pool exhausted
     
-    next_msg->data = (uint8_t*)malloc(len);
-    if (!next_msg->data) {
-        free(next_msg);
-        return false;
-    }
-    
-    memcpy(next_msg->target_mac, peer_mac, 6);
-    memcpy(next_msg->final_mac, peer_mac, 6);
-    memcpy(next_msg->data, data, len);
-    next_msg->len = len;
+    memcpy(next_buf->msg.target_mac, peer_mac, 6);
+    memcpy(next_buf->msg.final_mac, peer_mac, 6);
+    memcpy(next_buf->payload, data, len);
+    next_buf->msg.len = len;
     global_msg_id++;
     
-    if (xQueueSend(network_queue, &next_msg, 0) == pdPASS) return true;
+    if (xQueueSend(network_queue, &next_buf, 0) == pdPASS) return true;
     
-    free(next_msg->data);
-    free(next_msg);
+    xQueueSend(free_send_queue, &next_buf, 0);
     return false;
 }
 
@@ -242,12 +265,13 @@ void Messenger::send_ack(const uint8_t* mac, uint32_t msg_id, uint8_t seq) {
 }
 
 void network_task(void* pvParameters) {
-    network_msg_t* m;
+    network_msg_buffer_t* m_buf;
     packet_header_t h;
     fragment_packet_t p;
 
     while (true) {
-        if (xQueueReceive(network_queue, &m, portMAX_DELAY) == pdPASS) {
+        if (xQueueReceive(network_queue, &m_buf, portMAX_DELAY) == pdPASS) {
+            network_msg_t* m = &m_buf->msg;
             messenger_busy = true;
             int total = (m->len + PQC_PAYLOAD_SIZE - 1) / PQC_PAYLOAD_SIZE;
             
@@ -268,56 +292,65 @@ void network_task(void* pvParameters) {
                     continue;
                 }
 
+                expected_ack_id = h.msg_id;
+                expected_ack_seq = h.seq;
+
                 for (int r = 0; r < 3; r++) {
-                    ack_received = false;
+                    xTaskNotifyStateClear(network_task_handle);
                     esp_now_send(m->target_mac, (uint8_t*)&p, sizeof(p));
-                    uint32_t s = millis();
-                    while (millis() - s < 250) { if (ack_received) break; vTaskDelay(1); }
-                    if (ack_received) break;
+                    
+                    uint32_t notified_value = 0;
+                    if (xTaskNotifyWait(0x00, 0xFFFFFFFF, &notified_value, 250 / portTICK_PERIOD_MS) == pdTRUE) {
+                        break;
+                    }
                 }
             }
-            free(m->data);
-            free(m);
+            xQueueSend(free_send_queue, &m_buf, 0);
             messenger_busy = false;
         }
     }
 }
 
 void crypto_task(void* pvParameters) {
-    raw_packet_t raw;
+    raw_packet_t* raw_ptr = NULL;
     uint8_t* work_ptr = network_workspace.encryption_buffer; 
     size_t work_len;
     while (true) {
         // Gelen paketlerin kuyruktan alınıp rahatça (Mutex engeli olmadan WiFi Task'ı bekletmeden) işlenmesi
-        if (xQueueReceive(recv_queue, &raw, 10 / portTICK_PERIOD_MS) == pdPASS) {
-            if (!Messenger::is_blacklisted(raw.mac)) {
-                fragment_packet_t* pkt = (fragment_packet_t*)raw.data;
+        if (xQueueReceive(recv_queue, &raw_ptr, 10 / portTICK_PERIOD_MS) == pdPASS) {
+            if (!Messenger::is_blacklisted(raw_ptr->mac)) {
+                fragment_packet_t* pkt = (fragment_packet_t*)raw_ptr->data;
                 
                 // 2. CRYPTOGRAPHIC FIREWALL (HMAC Check) - Burada güvenle Mutex alınıyor
                 uint8_t calculated_hmac[32];
                 if (!Messenger::compute_hmac(calculated_hmac, (const uint8_t*)pkt, 250 - 32, HMAC_SECRET)) {
                     ESP_LOGE("PQC_NETWORK", "HMAC was dropped due to mutex timeout!");
                 } else if (!SecurityOfficer::secure_compare(pkt->hmac, calculated_hmac, 32)) {
-                    Messenger::handle_blacklist(raw.mac, false);
+                    Messenger::handle_blacklist(raw_ptr->mac, false);
                 } else {
                     packet_header_t header;
                     uint8_t* payload = network_workspace.packet_buffer; 
 
                     if (!NetworkPrivacy::unwrap(&header, payload, pkt)) {
-                        Messenger::handle_blacklist(raw.mac, false);
-                    } else if (Messenger::check_replay(raw.mac, header.msg_id)) {
-                        Messenger::handle_blacklist(raw.mac, true);
+                        Messenger::handle_blacklist(raw_ptr->mac, false);
+                    } else if (Messenger::check_replay(raw_ptr->mac, header.msg_id)) {
+                        Messenger::handle_blacklist(raw_ptr->mac, true);
 
                         if (header.type == MSG_ACK) { 
-                            ack_received = true; 
+                            if (header.msg_id == expected_ack_id && header.seq == expected_ack_seq) {
+                                if (network_task_handle != NULL) {
+                                    xTaskNotify(network_task_handle, 1, eSetBits);
+                                }
+                            }
                         } else if (header.type == MSG_DATA) {
                             if (Messenger::ring_buffer_write(payload, header.payload_len)) {
-                                Messenger::send_ack(raw.mac, header.msg_id, header.seq);
+                                Messenger::send_ack(raw_ptr->mac, header.msg_id, header.seq);
                             }
                         }
                     }
                 }
             }
+            xQueueSend(free_recv_queue, &raw_ptr, 0);
         }
 
         if (Messenger::ring_buffer_has_data()) {
