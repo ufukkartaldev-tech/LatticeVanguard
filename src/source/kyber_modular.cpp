@@ -161,17 +161,12 @@ int Kyber512::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     
     sha3_256(kr + 32, ct, KYBER_512_CIPHERTEXTBYTES);
     
-    if (fail) {
-        // Safe Reject: Generate pseudo-random SS from context to prevent info leakage
-        uint8_t reject_buf[64];
-        memcpy(reject_buf, z, 32);
-        memcpy(reject_buf + 32, kr + 32, 32);
-        sha3_256(ss, reject_buf, 64);
-    } else {
-        // Success: Shared Secret is already in ss from the encaps call (simplified)
-        // In real FO, it comes from kr[0..31]
-        sha3_256(ss, kr, 64);
+    uint8_t mask = -(uint8_t)fail;
+    for (int i = 0; i < 32; i++) {
+        kr[i] = (kr[i] & ~mask) | (z[i] & mask);
     }
+    
+    sha3_256(ss, kr, 64);
 
     return 0;
 }
@@ -308,14 +303,12 @@ int Kyber768::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     
     sha3_256(kr + 32, ct, KYBER_768_CIPHERTEXTBYTES);
     
-    if (fail) {
-        uint8_t reject_buf[64];
-        memcpy(reject_buf, z, 32);
-        memcpy(reject_buf + 32, kr + 32, 32);
-        sha3_256(ss, reject_buf, 64);
-    } else {
-        sha3_256(ss, kr, 64);
+    uint8_t mask = -(uint8_t)fail;
+    for (int i = 0; i < 32; i++) {
+        kr[i] = (kr[i] & ~mask) | (z[i] & mask);
     }
+    
+    sha3_256(ss, kr, 64);
     return 0;
 }
 
