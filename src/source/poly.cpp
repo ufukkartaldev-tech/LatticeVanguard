@@ -31,12 +31,11 @@ static void cbd(poly *r, const uint8_t *buf, int eta) {
         // Eta = 3 için CBD (Kyber-512'de kullanılır)
         // Burada 3 bitlik bloklar kullanılır: a = bit1+bit2+bit3, b = bit4+bit5+bit6. Sonuç = a - b.
         for (i = 0; i < 256 / 4; i++) {
-            uint64_t t_64 = 0;
-            for(int k=0; k<6; k++) t_64 |= ((uint64_t)buf[6*i+k] << (8*k));
-            
-            d = t_64 & 0x00249249;
-            d += (t_64 >> 1) & 0x00249249;
-            d += (t_64 >> 2) & 0x00249249;
+            t = (uint32_t)buf[3*i] | ((uint32_t)buf[3*i+1] << 8) | ((uint32_t)buf[3*i+2] << 16);
+
+            d = t & 0x00249249;
+            d += (t >> 1) & 0x00249249;
+            d += (t >> 2) & 0x00249249;
 
             for (j = 0; j < 4; j++) {
                 a = (d >> (6 * j)) & 0x7;
