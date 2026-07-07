@@ -198,8 +198,8 @@ void poly_compress(uint8_t *r, const poly *a, int du) {
             for(j=0; j<4; j++) {
                 t = a->coeffs[4*i+j];
                 t += ((int32_t)t >> 31) & KYBER_Q;
-                // Constant-time compression: (t * 1024 + 1664) / 3329
-                c[j] = (((t << 10) + 1664) * 20159 + (1 << 25)) >> 26;
+                // Compression: round(t * 1024 / Q) = (t * 1024 + Q/2) / Q
+                c[j] = (((t << 10) + KYBER_Q / 2) / KYBER_Q);
                 c[j] &= 0x3FF;
             }
             r[5*i+0] = c[0] & 0xFF;
@@ -214,8 +214,8 @@ void poly_compress(uint8_t *r, const poly *a, int du) {
             for(j=0; j<2; j++) {
                 t = a->coeffs[2*i+j];
                 t += ((int32_t)t >> 31) & KYBER_Q;
-                // Constant-time compression: (t * 16 + 1664) / 3329
-                c[j] = (((t << 4) + 1664) * 20159 + (1 << 25)) >> 26;
+                // Compression: round(t * 16 / Q) = (t * 16 + Q/2) / Q
+                c[j] = (((t << 4) + KYBER_Q / 2) / KYBER_Q);
                 c[j] &= 0xF;
             }
             r[i] = c[0] | (c[1] << 4);
