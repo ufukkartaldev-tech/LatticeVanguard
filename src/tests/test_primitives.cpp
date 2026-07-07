@@ -7,6 +7,7 @@
 #include "../include/poly.h"
 #include "../include/encryption.h"
 #include <string.h>
+#include <stdlib.h>
 
 namespace PQC {
 namespace Test {

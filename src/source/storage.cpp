@@ -4,6 +4,7 @@
 #include "../include/security.h"
 #include "../include/csprng.h"
 #include <string.h>
+#include <stdio.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>
