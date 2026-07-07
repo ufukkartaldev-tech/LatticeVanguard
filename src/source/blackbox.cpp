@@ -1,5 +1,6 @@
 #include "../include/blackbox.h"
 #include <string.h>
+#include <stdio.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -120,6 +121,7 @@ namespace PQC {
 namespace System {
 const char* BlackBox::LOG_PATH = "";
 bool BlackBox::init() { return true; }
+void BlackBox::log_security_incident(const char* type, const uint8_t* mac) { (void)mac; printf("[BLACKBOX MOCK] Security incident: %s\n", type); }
 void BlackBox::log_error(const char* op, uint32_t it, size_t l) { printf("[BLACKBOX MOCK] Error: %s at %u leak %zu\n", op, it, l); }
 void BlackBox::print_saved_logs() { printf("[BLACKBOX MOCK] No hardware logs on PC.\n"); }
 void BlackBox::clear_logs() {}

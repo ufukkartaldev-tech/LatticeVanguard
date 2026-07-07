@@ -1,6 +1,8 @@
 #include "../include/workspace_unified.h"
 #include "../include/platform.h"
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 /*
   UNIFIED WORKSPACE IMPLEMENTATION

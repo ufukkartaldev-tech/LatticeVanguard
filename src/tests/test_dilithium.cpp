@@ -7,6 +7,10 @@
 
 #include "../include/workspace.h"
 
+#ifndef ARDUINO
+#include "../include/pc_compat.h"
+#endif
+
 namespace PQC {
 namespace Test {
 
@@ -18,7 +22,7 @@ bool ForgeTester::test_dilithium_malleability() {
     const uint8_t msg[] = "Test Message";
     
     ScopedWorkspace local_ws;
-    if (!local_ws.ws) { Serial.println("OOM!"); return; }
+    if (!local_ws.ws) { Serial.println("OOM!"); return false; }
     
     DSA::Dilithium2::keypair(local_ws, d_pk, d_sk);
     DSA::Dilithium2::sign(local_ws, sig, &siglen, msg, sizeof(msg), d_sk);

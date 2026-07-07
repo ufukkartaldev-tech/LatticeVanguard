@@ -12,30 +12,8 @@ namespace DSA {
 
 using Memory::CryptoWorkspace;
 
-typedef struct {
-    int32_t coeffs[256];
-} poly;
-
-typedef struct {
-    poly vec[DILITHIUM2_K];
-} polyveck;
-
-typedef struct {
-    poly vec[DILITHIUM2_L];
-} polyvecl;
-
-// Compact (Packed) Types - RAM Armor
-typedef struct {
-    uint8_t bits[768]; // 256 * 24 bit (3 bytes per coeff) = 768 bytes
-} packed_poly;
-
-typedef struct {
-    packed_poly vec[DILITHIUM2_K];
-} packed_polyveck;
-
-typedef struct {
-    packed_poly vec[DILITHIUM2_L];
-} packed_polyvecl;
+// Dilithium polynomial and packed types are defined in dilithium_params.h
+// so they are visible to workspace.h before it is included below.
 
 class Dilithium2 {
 public:

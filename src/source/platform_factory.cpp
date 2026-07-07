@@ -19,67 +19,10 @@ INetworkInterface* Network = nullptr;
 IStorageInterface* Storage = nullptr;
 ILogInterface* Logger = nullptr;
 
-// Platform Factory Implementation
-IPlatform* PlatformFactory::create_platform() {
-#ifdef PLATFORM_ESP32
-    return new ESP32Platform();
-#elif defined(PLATFORM_STM32)
-    return new STM32Platform();
-#elif defined(PLATFORM_PC)
-    return new PCPlatform();
-#else
-    #error "Unsupported platform"
-    return nullptr;
-#endif
-}
-
-IMemoryManager* PlatformFactory::create_memory_manager() {
-#ifdef PLATFORM_ESP32
-    return new ESP32MemoryManager();
-#elif defined(PLATFORM_STM32)
-    return new STM32MemoryManager();
-#elif defined(PLATFORM_PC)
-    return new PCMemoryManager();
-#else
-    return nullptr;
-#endif
-}
-
-INetworkInterface* PlatformFactory::create_network_interface() {
-#ifdef PLATFORM_ESP32
-    return new ESP32NetworkInterface();
-#elif defined(PLATFORM_STM32)
-    return new STM32NetworkInterface();
-#elif defined(PLATFORM_PC)
-    return new PCNetworkInterface();
-#else
-    return nullptr;
-#endif
-}
-
-IStorageInterface* PlatformFactory::create_storage_interface() {
-#ifdef PLATFORM_ESP32
-    return new ESP32StorageInterface();
-#elif defined(PLATFORM_STM32)
-    return new STM32StorageInterface();
-#elif defined(PLATFORM_PC)
-    return new PCStorageInterface();
-#else
-    return nullptr;
-#endif
-}
-
-ILogInterface* PlatformFactory::create_log_interface() {
-#ifdef PLATFORM_ESP32
-    return new ESP32LogInterface();
-#elif defined(PLATFORM_STM32)
-    return new STM32LogInterface();
-#elif defined(PLATFORM_PC)
-    return new PCLogInterface();
-#else
-    return nullptr;
-#endif
-}
+// Platform-specific factory functions (create_platform, create_memory_manager,
+// create_network_interface, create_storage_interface, create_log_interface)
+// are provided by the per-platform translation units:
+//   esp32_platform.cpp, stm32_platform.cpp, pc_platform.cpp
 
 // Platform Initialization
 bool initialize_platform() {
@@ -94,13 +37,12 @@ bool initialize_platform() {
     
     // Initialize all subsystems
     if (!Platform->init()) return false;
-    if (!Memory->init()) return false;
     if (!Network->init()) return false;
     if (!Storage->init()) return false;
     if (!Logger->init()) return false;
     
     // Initialize unified workspace
-    if (!Memory::UnifiedWorkspace::allocate()) {
+    if (!PQC::Memory::UnifiedWorkspace::allocate()) {
         return false;
     }
     
@@ -126,7 +68,7 @@ void shutdown_platform() {
     }
     
     if (Memory) {
-        Memory::UnifiedWorkspace::deallocate();
+        PQC::Memory::UnifiedWorkspace::deallocate();
         delete Memory;
         Memory = nullptr;
     }

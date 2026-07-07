@@ -3,6 +3,7 @@
 #include "../include/fips202.h"
 #include "../include/workspace.h"
 #include "../include/security.h"
+#include "../include/csprng.h"
 #include <string.h>
 
 using namespace PQC::Memory;
@@ -24,8 +25,6 @@ namespace DSA {
     volatile uint8_t *_p = (volatile uint8_t *)(ptr); \
     for (size_t _w = 0; _w < (size); _w++) _p[_w] = 0; \
 } while (0)
-
-#include "../include/csprng.h"
 
 // Generate secure random entropy using MbedTLS HMAC_DRBG
 #define DSA_RANDOM(buf, len) PQC::System::CSPRNG::randombytes((uint8_t*)(buf), (size_t)(len))
@@ -66,7 +65,7 @@ static int32_t make_hint(int32_t a, int32_t b) {
     return ((u1 >> 31) | (u2 >> 31));
 }
 
-static int32_t use_hint(int32_t a, uint8_t hint) {
+int32_t Dilithium2::use_hint(int32_t a, uint8_t hint) {
     int32_t a0, a1;
     a1 = decompose(a, &a0);
     if (hint == 0) return a1;
@@ -187,7 +186,7 @@ static void expand_mask(poly *p, const uint8_t seed[64], uint16_t nonce) {
 // --- PUBLIC PQC METHODS ---
 
 int Dilithium2::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     Security::SecurityOfficer::check_entropy_lock();
     uint8_t entropy[32]; DSA_RANDOM(entropy, 32);
@@ -238,7 +237,7 @@ int Dilithium2::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
 }
 
 int Dilithium2::sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const uint8_t *m, size_t mlen, const uint8_t *sk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t rho[32], key[32], tr[32], rhoprime[64], mu[64];
     memcpy(rho, sk, 32); memcpy(key, sk + 32, 32); memcpy(tr, sk + 64, 32);
@@ -377,7 +376,7 @@ int Dilithium2::sign(CryptoWorkspace* ws, uint8_t *sig, size_t *siglen, const ui
 }
 
 int Dilithium2::verify(CryptoWorkspace* ws, const uint8_t *sig, size_t siglen, const uint8_t *m, size_t mlen, const uint8_t *pk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     if (siglen != DILITHIUM2_SIGNBYTES) return -1;
     uint8_t rho[32], c_seed[32], mu[64]; polyvecl &z = ws->maths.dvl; polyveck &h = ws->maths.dvk1, &t1 = ws->maths.dvk2;
