@@ -16,7 +16,7 @@ bool PrimTester::test_keccak() {
     uint8_t out[32];
     uint8_t expected[32] = {
         0xa7, 0xff, 0xc6, 0xf8, 0xbf, 0x1e, 0xd7, 0x66, 0x51, 0xc1, 0x47, 0x56, 0xa0, 0x61, 0xd6, 0x62,
-        0xf5, 0x80, 0xff, 0x4d, 0x43, 0x73, 0x04, 0xb8, 0x83, 0x9b, 0x8a, 0x92, 0x07, 0x3e, 0x81, 0x10
+        0xf5, 0x80, 0xff, 0x4d, 0xe4, 0x3b, 0x49, 0xfa, 0x82, 0xd8, 0x0a, 0x4b, 0x80, 0xf8, 0x43, 0x4a
     };
     sha3_256(out, (const uint8_t*)"", 0);
     return TestSuite::compare_bytes(out, expected, 32);
@@ -30,8 +30,11 @@ bool PrimTester::test_ntt_symmetry() {
     }
     ntt(r);
     invntt(r);
+    // invntt is invntt_tomont: it returns coefficients in Montgomery domain
+    // (scaled by 2^16 mod q). Convert back before comparing.
     for(int i=0; i<256; i++) {
-        int16_t c = (r[i] % 3329 + 3329) % 3329;
+        int16_t c = montgomery_reduce(r[i]);
+        c = (c % 3329 + 3329) % 3329;
         if (c != original[i]) return false;
     }
     return true;

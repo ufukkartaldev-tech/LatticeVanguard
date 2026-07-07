@@ -93,11 +93,11 @@ void Kyber512::indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, 
     for (int i = 0; i < K; i++) {
         gen_matrix_row(&a_row, pk + K * KYBER_POLYBYTES, i, K, 1);
         polyvec_basemul_acc_montgomery(&bp.vec[i], &a_row, &sp, K);
-        poly_tomont(&bp.vec[i]); poly_add(&bp.vec[i], &bp.vec[i], &e1.vec[i]); poly_reduce(&bp.vec[i]);
+        poly_invntt_tomont(&bp.vec[i]); poly_add(&bp.vec[i], &bp.vec[i], &e1.vec[i]); poly_reduce(&bp.vec[i]);
     }
     
     polyvec_basemul_acc_montgomery(&v, &pkpv, &sp, K);
-    poly_tomont(&v); poly_add(&v, &v, &e2);
+    poly_invntt_tomont(&v); poly_add(&v, &v, &e2);
     poly_frommsg(&k_poly, msg); poly_add(&v, &v, &k_poly); poly_reduce(&v);
 
     for (int i = 0; i < K; i++) poly_compress(ct + i * 320, &bp.vec[i], 10);
@@ -143,7 +143,7 @@ int Kyber512::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     polyvec_ntt(&bp, K);
     polyvec_basemul_acc_montgomery(&mp, &skpv, &bp, K);
     poly_invntt_tomont(&mp);
-    poly_tomont(&mp); poly_reduce(&mp);
+    poly_reduce(&mp);
     poly_sub(&mp, &v, &mp); poly_reduce(&mp);
     poly_tomsg(msg, &mp);
 
@@ -237,11 +237,11 @@ void Kyber768::indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, 
     for (int i = 0; i < K; i++) {
         gen_matrix_row(&a_row, pk + K * KYBER_POLYBYTES, i, K, 1);
         polyvec_basemul_acc_montgomery(&bp.vec[i], &a_row, &sp, K);
-        poly_tomont(&bp.vec[i]); poly_add(&bp.vec[i], &bp.vec[i], &e1.vec[i]); poly_reduce(&bp.vec[i]);
+        poly_invntt_tomont(&bp.vec[i]); poly_add(&bp.vec[i], &bp.vec[i], &e1.vec[i]); poly_reduce(&bp.vec[i]);
     }
     
     polyvec_basemul_acc_montgomery(&v, &pkpv, &sp, K);
-    poly_tomont(&v); poly_add(&v, &v, &e2);
+    poly_invntt_tomont(&v); poly_add(&v, &v, &e2);
     poly_frommsg(&k_poly, msg); poly_add(&v, &v, &k_poly); poly_reduce(&v);
 
     for (int i = 0; i < K; i++) poly_compress(ct + i * 320, &bp.vec[i], 10);
@@ -287,7 +287,7 @@ int Kyber768::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     polyvec_ntt(&bp, K);
     polyvec_basemul_acc_montgomery(&mp, &skpv, &bp, K);
     poly_invntt_tomont(&mp);
-    poly_tomont(&mp); poly_reduce(&mp);
+    poly_reduce(&mp);
     poly_sub(&mp, &v, &mp); poly_reduce(&mp);
     poly_tomsg(msg, &mp);
 

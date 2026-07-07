@@ -31,12 +31,11 @@ static void cbd(poly *r, const uint8_t *buf, int eta) {
         // Eta = 3 için CBD (Kyber-512'de kullanılır)
         // Burada 3 bitlik bloklar kullanılır: a = bit1+bit2+bit3, b = bit4+bit5+bit6. Sonuç = a - b.
         for (i = 0; i < 256 / 4; i++) {
-            uint64_t t_64 = 0;
-            for(int k=0; k<6; k++) t_64 |= ((uint64_t)buf[6*i+k] << (8*k));
-            
-            d = t_64 & 0x00249249;
-            d += (t_64 >> 1) & 0x00249249;
-            d += (t_64 >> 2) & 0x00249249;
+            t = (uint32_t)buf[3*i] | ((uint32_t)buf[3*i+1] << 8) | ((uint32_t)buf[3*i+2] << 16);
+
+            d = t & 0x00249249;
+            d += (t >> 1) & 0x00249249;
+            d += (t >> 2) & 0x00249249;
 
             for (j = 0; j < 4; j++) {
                 a = (d >> (6 * j)) & 0x7;
@@ -111,8 +110,9 @@ void poly_invntt_tomont(poly *r) {
 }
 
 void poly_basemul_montgomery(poly *r, const poly *a, const poly *b) {
-    for (int i = 0; i < 128; i++) {
-        basemul(&r->coeffs[2 * i], &a->coeffs[2 * i], &b->coeffs[2 * i], zetas[64 + i]);
+    for (int i = 0; i < 64; i++) {
+        basemul(&r->coeffs[4 * i], &a->coeffs[4 * i], &b->coeffs[4 * i], zetas[64 + i]);
+        basemul(&r->coeffs[4 * i + 2], &a->coeffs[4 * i + 2], &b->coeffs[4 * i + 2], -zetas[64 + i]);
     }
 }
 
@@ -179,10 +179,10 @@ void poly_tomsg(uint8_t msg[32], const poly *r) {
     for (i = 0; i < 32; i++) {
         msg[i] = 0;
         for (j = 0; j < 8; j++) {
-            // Constant-Time Division: (x * 2 + 1664) / 3329
+            // Decode: nearest multiple of Q/2 -> bit = ((2*coeff + Q/2) / Q) & 1
             uint32_t v = r->coeffs[8 * i + j];
             v += ((int32_t)v >> 31) & KYBER_Q; // Map to [0, Q-1]
-            t = (((v << 1) + 1664) * 20159 + (1 << 25)) >> 26;
+            t = ((v << 1) + KYBER_Q / 2) / KYBER_Q;
             msg[i] |= (uint8_t)((t & 1) << j);
         }
     }
@@ -198,8 +198,8 @@ void poly_compress(uint8_t *r, const poly *a, int du) {
             for(j=0; j<4; j++) {
                 t = a->coeffs[4*i+j];
                 t += ((int32_t)t >> 31) & KYBER_Q;
-                // Constant-time compression: (t * 1024 + 1664) / 3329
-                c[j] = (((t << 10) + 1664) * 20159 + (1 << 25)) >> 26;
+                // Compression: round(t * 1024 / Q) = (t * 1024 + Q/2) / Q
+                c[j] = (((t << 10) + KYBER_Q / 2) / KYBER_Q);
                 c[j] &= 0x3FF;
             }
             r[5*i+0] = c[0] & 0xFF;
@@ -214,8 +214,8 @@ void poly_compress(uint8_t *r, const poly *a, int du) {
             for(j=0; j<2; j++) {
                 t = a->coeffs[2*i+j];
                 t += ((int32_t)t >> 31) & KYBER_Q;
-                // Constant-time compression: (t * 16 + 1664) / 3329
-                c[j] = (((t << 4) + 1664) * 20159 + (1 << 25)) >> 26;
+                // Compression: round(t * 16 / Q) = (t * 16 + Q/2) / Q
+                c[j] = (((t << 4) + KYBER_Q / 2) / KYBER_Q);
                 c[j] &= 0xF;
             }
             r[i] = c[0] | (c[1] << 4);
@@ -263,10 +263,13 @@ void polyvec_basemul_acc_montgomery(poly *r, const polyvec *a, const polyvec *b,
     memset(r->coeffs, 0, sizeof(r->coeffs));
     
     for (int i = 0; i < k; i++) {
-        for (int j = 0; j < 128; j++) {
-            basemul(t, &a->vec[i].coeffs[2 * j], &b->vec[i].coeffs[2 * j], zetas[64 + j]);
-            r->coeffs[2 * j] += t[0];
-            r->coeffs[2 * j + 1] += t[1];
+        for (int j = 0; j < 64; j++) {
+            basemul(t, &a->vec[i].coeffs[4 * j], &b->vec[i].coeffs[4 * j], zetas[64 + j]);
+            r->coeffs[4 * j] += t[0];
+            r->coeffs[4 * j + 1] += t[1];
+            basemul(t, &a->vec[i].coeffs[4 * j + 2], &b->vec[i].coeffs[4 * j + 2], -zetas[64 + j]);
+            r->coeffs[4 * j + 2] += t[0];
+            r->coeffs[4 * j + 3] += t[1];
         }
     }
     poly_reduce(r);
