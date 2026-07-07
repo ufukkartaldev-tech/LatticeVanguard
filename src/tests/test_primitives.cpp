@@ -30,8 +30,11 @@ bool PrimTester::test_ntt_symmetry() {
     }
     ntt(r);
     invntt(r);
+    // invntt is invntt_tomont: it returns coefficients in Montgomery domain
+    // (scaled by 2^16 mod q). Convert back before comparing.
     for(int i=0; i<256; i++) {
-        int16_t c = (r[i] % 3329 + 3329) % 3329;
+        int16_t c = montgomery_reduce(r[i]);
+        c = (c % 3329 + 3329) % 3329;
         if (c != original[i]) return false;
     }
     return true;
