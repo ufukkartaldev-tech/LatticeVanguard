@@ -8,6 +8,7 @@
 #include "../include/health.h"
 #include "../include/blackbox.h"
 #include <string.h>
+#include <stdio.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>
