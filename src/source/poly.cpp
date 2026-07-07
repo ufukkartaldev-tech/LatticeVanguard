@@ -111,8 +111,9 @@ void poly_invntt_tomont(poly *r) {
 }
 
 void poly_basemul_montgomery(poly *r, const poly *a, const poly *b) {
-    for (int i = 0; i < 128; i++) {
-        basemul(&r->coeffs[2 * i], &a->coeffs[2 * i], &b->coeffs[2 * i], zetas[64 + i]);
+    for (int i = 0; i < 64; i++) {
+        basemul(&r->coeffs[4 * i], &a->coeffs[4 * i], &b->coeffs[4 * i], zetas[64 + i]);
+        basemul(&r->coeffs[4 * i + 2], &a->coeffs[4 * i + 2], &b->coeffs[4 * i + 2], -zetas[64 + i]);
     }
 }
 
@@ -263,10 +264,13 @@ void polyvec_basemul_acc_montgomery(poly *r, const polyvec *a, const polyvec *b,
     memset(r->coeffs, 0, sizeof(r->coeffs));
     
     for (int i = 0; i < k; i++) {
-        for (int j = 0; j < 128; j++) {
-            basemul(t, &a->vec[i].coeffs[2 * j], &b->vec[i].coeffs[2 * j], zetas[64 + j]);
-            r->coeffs[2 * j] += t[0];
-            r->coeffs[2 * j + 1] += t[1];
+        for (int j = 0; j < 64; j++) {
+            basemul(t, &a->vec[i].coeffs[4 * j], &b->vec[i].coeffs[4 * j], zetas[64 + j]);
+            r->coeffs[4 * j] += t[0];
+            r->coeffs[4 * j + 1] += t[1];
+            basemul(t, &a->vec[i].coeffs[4 * j + 2], &b->vec[i].coeffs[4 * j + 2], -zetas[64 + j]);
+            r->coeffs[4 * j + 2] += t[0];
+            r->coeffs[4 * j + 3] += t[1];
         }
     }
     poly_reduce(r);
