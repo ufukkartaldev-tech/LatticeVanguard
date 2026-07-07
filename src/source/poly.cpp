@@ -179,10 +179,10 @@ void poly_tomsg(uint8_t msg[32], const poly *r) {
     for (i = 0; i < 32; i++) {
         msg[i] = 0;
         for (j = 0; j < 8; j++) {
-            // Constant-Time Division: (x * 2 + 1664) / 3329
+            // Decode: nearest multiple of Q/2 -> bit = ((2*coeff + Q/2) / Q) & 1
             uint32_t v = r->coeffs[8 * i + j];
             v += ((int32_t)v >> 31) & KYBER_Q; // Map to [0, Q-1]
-            t = (((v << 1) + 1664) * 20159 + (1 << 25)) >> 26;
+            t = ((v << 1) + KYBER_Q / 2) / KYBER_Q;
             msg[i] |= (uint8_t)((t & 1) << j);
         }
     }
