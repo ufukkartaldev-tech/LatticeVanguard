@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 #include "params.h"
 #include "dilithium_params.h"
 #include "poly.h"
@@ -31,12 +32,22 @@ union CryptoWorkspace {
         } data;
 
         // 2. Matematiksel Ham Katman (Scratchpad)
+        // Kyber (KEM) ve Dilithium (DSA) hesaplama alanları asla aynı anda
+        // canlı olmadığından, iki scratchpad anonim bir union içinde üst üste
+        // bindirilir. Tasarımın hedeflediği "%100 yeniden kullanım" budur ve
+        // en büyük statik/heap RAM israfını (Kyber bloğu kadar) ortadan kaldırır.
         struct {
-            polyvec kv1, kv2, kv3, kv4, kv5;
-            poly    kp1, kp2, kp3;
-            PQC::DSA::polyvecl dvl, dvl2;
-            PQC::DSA::polyveck dvk1, dvk2, dvk3, dvk4;
-            PQC::DSA::poly dp1, dp2;
+            union {
+                struct {
+                    polyvec kv1, kv2, kv3, kv4, kv5;
+                    poly    kp1, kp2, kp3;
+                };
+                struct {
+                    PQC::DSA::polyvecl dvl, dvl2;
+                    PQC::DSA::polyveck dvk1, dvk2, dvk3, dvk4;
+                    PQC::DSA::poly dp1, dp2;
+                };
+            };
         } maths;
 
         // 3. Matematiksel Sıkıştırılmış Katman (Optimizasyon için opsiyonel)
@@ -45,7 +56,6 @@ union CryptoWorkspace {
             PQC::DSA::packed_polyvecl pdvl;
         } compact;
     };
-    uint8_t raw[56000]; // Güvenli silme için (struct boyutunu kapsamalı)
 };
 
 // Thread-safe / Task-safe Scoped Memory Allocation (Heap memory exhaustion prevention)
@@ -55,12 +65,12 @@ public:
     ScopedWorkspace() {
         ws = new CryptoWorkspace();
         if (ws) {
-            for(size_t i=0; i<sizeof(ws->raw); i++) ws->raw[i] = 0;
+            memset((void*)ws, 0, sizeof(*ws));
         }
     }
     ~ScopedWorkspace() {
         if (ws) {
-            for(size_t i=0; i<sizeof(ws->raw); i++) ws->raw[i] = 0; // Secure wipe
+            memset((void*)ws, 0, sizeof(*ws)); // Secure wipe (covers the whole union)
             delete ws;
         }
     }

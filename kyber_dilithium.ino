@@ -41,7 +41,7 @@ const uint8_t PEER_MAC[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
 void wipe_all_sensitive_data() {
     ScopedWorkspace local_ws;
     if (!local_ws.ws) return;
-    memset(local_ws->raw, 0, sizeof(local_ws->raw));
+    memset((void*)local_ws.ws, 0, sizeof(*local_ws.ws));
     #ifndef PQC_SILENT_MODE
     Serial.println("SİSTEM: Tüm kriptografik bellek (CryptoWorkspace) fiziksel olarak RAM'den silindi.");
     #endif
