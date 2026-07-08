@@ -6,6 +6,8 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
+#else
+#include "../include/pc_compat.h"
 #endif
 
 namespace PQC {

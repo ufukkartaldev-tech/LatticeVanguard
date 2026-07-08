@@ -6,6 +6,8 @@
 
 #ifdef ARDUINO
 #include <Arduino.h>
+#else
+#include "../include/pc_compat.h"
 #endif
 
 namespace PQC {
@@ -41,7 +43,7 @@ bool TrustManager::issue_certificate(uint8_t* cert_out, const uint8_t* device_ma
     
     size_t sig_len = 0;
     // Admin, cihazın MAC ve PK birleşimini imzalar.
-    int res = PQC::DSA::Dilithium2::sign(cert_out, &sig_len, auth_payload, sizeof(auth_payload), admin_sk);
+    int res = PQC::DSA::Dilithium2::sign(nullptr, cert_out, &sig_len, auth_payload, sizeof(auth_payload), admin_sk);
     return (res == 0);
 }
 
@@ -51,7 +53,7 @@ bool TrustManager::verify_certificate(const uint8_t* cert, const uint8_t* device
     memcpy(auth_payload + 6, device_pk, 1312);
     
     // Sertifika (imza) doğrulaması
-    int res = PQC::DSA::Dilithium2::verify(cert, 2420, auth_payload, sizeof(auth_payload), admin_pk);
+    int res = PQC::DSA::Dilithium2::verify(nullptr, cert, 2420, auth_payload, sizeof(auth_payload), admin_pk);
     return (res == 0);
 }
 

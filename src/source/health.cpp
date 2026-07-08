@@ -1,6 +1,7 @@
 #include "../include/health.h"
 #include "../include/pqc_config.h"
 #include <string.h>
+#include <stdio.h>
 #include "../include/csprng.h"
 
 #ifdef ARDUINO
@@ -88,6 +89,7 @@ bool HealthMonitor::is_secure_boot_active() {
 namespace PQC {
 namespace System {
 void HealthMonitor::report_state(const char* n, uint32_t d) { printf("[PC HEALTH] %s: %u us\n", n, d); }
+float HealthMonitor::check_rng_entropy() { return 1.0f; }
 size_t HealthMonitor::get_free_ram() { return 0; }
 size_t HealthMonitor::get_min_free_ram() { return 0; }
 bool HealthMonitor::is_hardware_salt_active() { return false; }

@@ -7,7 +7,7 @@
 
 #ifndef ARDUINO
 
-#include "src/include/test_suite.h"
+#include "src/tests/test_suite.h"
 #include <iostream>
 
 int main() {

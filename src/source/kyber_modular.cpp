@@ -3,14 +3,13 @@
 #include "../include/ntt.h"
 #include "../include/workspace.h"
 #include "../include/security.h"
+#include "../include/csprng.h"
 #include <string.h>
 
 using namespace PQC::Memory;
 
 namespace PQC {
 namespace KEM {
-
-#include "../include/csprng.h"
 
 // Generate secure random entropy using MbedTLS HMAC_DRBG
 #define KEM_RANDOM(ptr, len) PQC::System::CSPRNG::randombytes((uint8_t*)(ptr), (size_t)(len))
@@ -26,7 +25,7 @@ void KyberBase::gen_matrix_row(polyvec *a_row, const uint8_t seed[32], int row_i
 
 // Kyber512 Implementation
 int Kyber512::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     Security::SecurityOfficer::check_entropy_lock();
     uint8_t buf[64];
@@ -94,11 +93,11 @@ void Kyber512::indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, 
     for (int i = 0; i < K; i++) {
         gen_matrix_row(&a_row, pk + K * KYBER_POLYBYTES, i, K, 1);
         polyvec_basemul_acc_montgomery(&bp.vec[i], &a_row, &sp, K);
-        poly_tomont(&bp.vec[i]); poly_add(&bp.vec[i], &bp.vec[i], &e1.vec[i]); poly_reduce(&bp.vec[i]);
+        poly_invntt_tomont(&bp.vec[i]); poly_add(&bp.vec[i], &bp.vec[i], &e1.vec[i]); poly_reduce(&bp.vec[i]);
     }
     
     polyvec_basemul_acc_montgomery(&v, &pkpv, &sp, K);
-    poly_tomont(&v); poly_add(&v, &v, &e2);
+    poly_invntt_tomont(&v); poly_add(&v, &v, &e2);
     poly_frommsg(&k_poly, msg); poly_add(&v, &v, &k_poly); poly_reduce(&v);
 
     for (int i = 0; i < K; i++) poly_compress(ct + i * 320, &bp.vec[i], 10);
@@ -106,7 +105,7 @@ void Kyber512::indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, 
 }
 
 int Kyber512::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64], kr[64], msg[32];
 
@@ -122,7 +121,7 @@ int Kyber512::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_
 }
 
 int Kyber512::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64], kr[64], msg[32], ct_re[KYBER_512_CIPHERTEXTBYTES];
     const uint8_t *pk = sk + KYBER_512_K * KYBER_POLYBYTES;
@@ -144,7 +143,7 @@ int Kyber512::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     polyvec_ntt(&bp, K);
     polyvec_basemul_acc_montgomery(&mp, &skpv, &bp, K);
     poly_invntt_tomont(&mp);
-    poly_tomont(&mp); poly_reduce(&mp);
+    poly_reduce(&mp);
     poly_sub(&mp, &v, &mp); poly_reduce(&mp);
     poly_tomsg(msg, &mp);
 
@@ -173,7 +172,7 @@ int Kyber512::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
 
 // Kyber768 Implementation
 int Kyber768::keypair(CryptoWorkspace* ws, uint8_t *pk, uint8_t *sk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64];
     uint8_t public_seed[32], noise_seed[32];
@@ -238,11 +237,11 @@ void Kyber768::indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, 
     for (int i = 0; i < K; i++) {
         gen_matrix_row(&a_row, pk + K * KYBER_POLYBYTES, i, K, 1);
         polyvec_basemul_acc_montgomery(&bp.vec[i], &a_row, &sp, K);
-        poly_tomont(&bp.vec[i]); poly_add(&bp.vec[i], &bp.vec[i], &e1.vec[i]); poly_reduce(&bp.vec[i]);
+        poly_invntt_tomont(&bp.vec[i]); poly_add(&bp.vec[i], &bp.vec[i], &e1.vec[i]); poly_reduce(&bp.vec[i]);
     }
     
     polyvec_basemul_acc_montgomery(&v, &pkpv, &sp, K);
-    poly_tomont(&v); poly_add(&v, &v, &e2);
+    poly_invntt_tomont(&v); poly_add(&v, &v, &e2);
     poly_frommsg(&k_poly, msg); poly_add(&v, &v, &k_poly); poly_reduce(&v);
 
     for (int i = 0; i < K; i++) poly_compress(ct + i * 320, &bp.vec[i], 10);
@@ -250,7 +249,7 @@ void Kyber768::indcpa_enc(CryptoWorkspace* ws, uint8_t *ct, const uint8_t *msg, 
 }
 
 int Kyber768::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_t *pk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64], kr[64], msg[32];
 
@@ -266,7 +265,7 @@ int Kyber768::encaps(CryptoWorkspace* ws, uint8_t *ct, uint8_t *ss, const uint8_
 }
 
 int Kyber768::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const uint8_t *sk) {
-    PQC::Memory::ScopedWorkspace local_ws;
+    Memory::ScopedWorkspace local_ws;
     if (!ws) { if (!local_ws.ws) return -1; ws = local_ws.ws; }
     uint8_t buf[64], kr[64], msg[32], ct_re[KYBER_768_CIPHERTEXTBYTES];
     const uint8_t *pk = sk + KYBER_768_K * KYBER_POLYBYTES;
@@ -288,7 +287,7 @@ int Kyber768::decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const 
     polyvec_ntt(&bp, K);
     polyvec_basemul_acc_montgomery(&mp, &skpv, &bp, K);
     poly_invntt_tomont(&mp);
-    poly_tomont(&mp); poly_reduce(&mp);
+    poly_reduce(&mp);
     poly_sub(&mp, &v, &mp); poly_reduce(&mp);
     poly_tomsg(msg, &mp);
 

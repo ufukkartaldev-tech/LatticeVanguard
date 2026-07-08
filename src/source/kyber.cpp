@@ -190,7 +190,7 @@ int kyber512_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const u
     indcpa_enc(ws, cmp_ct, msg, pk, kr + 32, k);
     
     // Constant-time check utilizing fault-injection protection
-    bool fail = !Security::SecurityOfficer::secure_compare(ct, cmp_ct, KYBER_512_CIPHERTEXTBYTES);
+    bool fail = !PQC::Security::SecurityOfficer::secure_compare(ct, cmp_ct, KYBER_512_CIPHERTEXTBYTES);
     
     sha3_256(kr + 32, ct, KYBER_512_CIPHERTEXTBYTES);
     
@@ -245,7 +245,7 @@ int kyber768_decaps(CryptoWorkspace* ws, uint8_t *ss, const uint8_t *ct, const u
     sha3_512(kr, buf, 64);
     indcpa_enc(ws, cmp_ct, msg, pk, kr + 32, k);
     
-    bool fail = !Security::SecurityOfficer::secure_compare(ct, cmp_ct, KYBER_768_CIPHERTEXTBYTES);
+    bool fail = !PQC::Security::SecurityOfficer::secure_compare(ct, cmp_ct, KYBER_768_CIPHERTEXTBYTES);
     
     sha3_256(kr + 32, ct, KYBER_768_CIPHERTEXTBYTES);
     

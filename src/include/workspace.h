@@ -2,6 +2,7 @@
 #define PQC_WORKSPACE_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include "params.h"
 #include "dilithium_params.h"
 #include "poly.h"

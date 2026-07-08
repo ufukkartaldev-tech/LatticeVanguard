@@ -59,6 +59,7 @@ public:
 class TestSuite {
 public:
     static void run_all_tests();
+    static void run_stress_test();
     static void log_test(const char* name, bool result);
     static bool compare_bytes(const uint8_t* a, const uint8_t* b, size_t len);
 };

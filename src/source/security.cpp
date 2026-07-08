@@ -1,10 +1,13 @@
 #include "../include/security.h"
 #include "../include/health.h"
 #include "../include/storage.h"
+#include "../include/blackbox.h"
 #include <string.h>
 
 #ifdef ARDUINO
 #include <Arduino.h>
+#else
+#include "../include/pc_compat.h"
 #endif
 
 namespace PQC {
