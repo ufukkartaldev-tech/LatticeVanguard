@@ -53,6 +53,7 @@ public:
     static bool test_power_cycle_resilience();
     static bool test_trng_entropy_drop();
     static bool test_multi_device_stress();
+    static bool test_concurrent_send_ids();
 };
 
 // Test Suite Yöneticisi

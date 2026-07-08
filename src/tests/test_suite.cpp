@@ -54,6 +54,7 @@ void TestSuite::run_all_tests() {
     log_test("Flash Integrity", ChaosTester::test_flash_integrity_violation());
     log_test("Power-Cycle Resilience", ChaosTester::test_power_cycle_resilience());
     log_test("Multi-Device Stress", ChaosTester::test_multi_device_stress());
+    log_test("Concurrent Send IDs", ChaosTester::test_concurrent_send_ids());
 #endif
 
     Serial.println("--- ALL TESTS COMPLETED ---\n");

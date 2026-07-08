@@ -119,6 +119,15 @@ void Messenger::on_data_sent(const uint8_t* mac, esp_now_send_status_t status) {
     last_send_ok = (status == ESP_NOW_SEND_SUCCESS);
 }
 
+// Atomically hand out a unique, monotonically increasing message id. Safe to
+// call from multiple producer tasks concurrently.
+uint32_t Messenger::reserve_msg_id() {
+    portENTER_CRITICAL(&msg_id_mux);
+    uint32_t id = ++global_msg_id;
+    portEXIT_CRITICAL(&msg_id_mux);
+    return id;
+}
+
 bool Messenger::compute_hmac(uint8_t* out, const uint8_t* hmac_input, size_t len, const uint8_t* key) {
     if (xSemaphoreTake(hmac_mutex, 10 / portTICK_PERIOD_MS) != pdTRUE) {
         ESP_LOGE("PQC_NETWORK", "HMAC Mutex alinmadi, islem iptal!");
@@ -253,13 +262,10 @@ bool Messenger::send_reliable(const uint8_t* peer_mac, const uint8_t* data, size
     memcpy(next_buf->payload, data, len);
     next_buf->msg.len = len;
 
-    // Atomically reserve a unique message id and bind it to THIS buffer, so the
-    // id travels with the message instead of being read from the shared global
-    // at transmit time (which races with concurrent send_reliable callers).
-    portENTER_CRITICAL(&msg_id_mux);
-    uint32_t assigned_id = ++global_msg_id;
-    portEXIT_CRITICAL(&msg_id_mux);
-    next_buf->msg.msg_id = assigned_id;
+    // Reserve a unique id and bind it to THIS buffer, so the id travels with the
+    // message instead of being read from the shared global at transmit time
+    // (which races with concurrent send_reliable callers).
+    next_buf->msg.msg_id = reserve_msg_id();
 
     if (xQueueSend(network_queue, &next_buf, 0) == pdPASS) return true;
     
