@@ -18,6 +18,15 @@
 #include <cstdio>
 #include <chrono>
 #include <thread>
+#include <mutex>
+
+// ESP32 critical-section (portMUX) shim for the host build. On real hardware
+// these come from FreeRTOS; here a std::mutex provides the same mutual
+// exclusion so shared code (e.g. reserve_msg_id_locked) can be unit-tested.
+struct portMUX_TYPE { std::mutex mtx; };
+#define portMUX_INITIALIZER_UNLOCKED {}
+inline void portENTER_CRITICAL(portMUX_TYPE* m) { m->mtx.lock(); }
+inline void portEXIT_CRITICAL(portMUX_TYPE* m) { m->mtx.unlock(); }
 
 // Monotonic millisecond/microsecond counters (Arduino millis()/micros()).
 inline uint32_t millis() {

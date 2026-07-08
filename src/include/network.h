@@ -77,6 +77,9 @@ public:
     static bool send_reliable(const uint8_t* peer_mac, const uint8_t* data, size_t len);
     static bool is_busy();
 
+    // Thread-safe unique message-id allocator (shared by all producer tasks)
+    static uint32_t reserve_msg_id();
+
 #ifdef ARDUINO
     static void on_data_recv(const uint8_t* mac, const uint8_t* incomingData, int len);
     static void on_data_sent(const uint8_t* mac, esp_now_send_status_t status);

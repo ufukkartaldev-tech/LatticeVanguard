@@ -53,6 +53,13 @@ public:
     static bool test_power_cycle_resilience();
     static bool test_trng_entropy_drop();
     static bool test_multi_device_stress();
+    static bool test_concurrent_send_ids();
+};
+
+// 6. Eşzamanlılık (Concurrency) Testleri
+class ConcurrencyTester {
+public:
+    static bool test_msg_id_allocation();
 };
 
 // Test Suite Yöneticisi

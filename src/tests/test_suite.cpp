@@ -38,6 +38,11 @@ void TestSuite::run_all_tests() {
     log_test("Kyber stability", KyberTester::test_kyber_kem_vectors());
     log_test("Implicit Rejection", KyberTester::test_decaps_failure());
 
+#ifndef ARDUINO
+    // 2b. Concurrency (host-only: uses std::thread over the shared id allocator)
+    log_test("Concurrent MsgID Alloc", ConcurrencyTester::test_msg_id_allocation());
+#endif
+
 #ifdef ARDUINO
     // 3. System Audit
     log_test("Entropy Quality", AuditTester::test_randomness_entropy());
@@ -54,6 +59,7 @@ void TestSuite::run_all_tests() {
     log_test("Flash Integrity", ChaosTester::test_flash_integrity_violation());
     log_test("Power-Cycle Resilience", ChaosTester::test_power_cycle_resilience());
     log_test("Multi-Device Stress", ChaosTester::test_multi_device_stress());
+    log_test("Concurrent Send IDs", ChaosTester::test_concurrent_send_ids());
 #endif
 
     Serial.println("--- ALL TESTS COMPLETED ---\n");
