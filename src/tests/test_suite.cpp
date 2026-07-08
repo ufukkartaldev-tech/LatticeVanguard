@@ -38,6 +38,11 @@ void TestSuite::run_all_tests() {
     log_test("Kyber stability", KyberTester::test_kyber_kem_vectors());
     log_test("Implicit Rejection", KyberTester::test_decaps_failure());
 
+#ifndef ARDUINO
+    // 2b. Concurrency (host-only: uses std::thread over the shared id allocator)
+    log_test("Concurrent MsgID Alloc", ConcurrencyTester::test_msg_id_allocation());
+#endif
+
 #ifdef ARDUINO
     // 3. System Audit
     log_test("Entropy Quality", AuditTester::test_randomness_entropy());

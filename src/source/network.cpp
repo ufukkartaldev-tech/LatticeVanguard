@@ -9,6 +9,7 @@
 #ifdef ARDUINO
 #include <Arduino.h>
 #include "esp_log.h"
+#include "../include/msg_id_alloc.h"  // needs portMUX_TYPE (from FreeRTOS above)
 
 namespace PQC {
 namespace Network {
@@ -122,10 +123,7 @@ void Messenger::on_data_sent(const uint8_t* mac, esp_now_send_status_t status) {
 // Atomically hand out a unique, monotonically increasing message id. Safe to
 // call from multiple producer tasks concurrently.
 uint32_t Messenger::reserve_msg_id() {
-    portENTER_CRITICAL(&msg_id_mux);
-    uint32_t id = ++global_msg_id;
-    portEXIT_CRITICAL(&msg_id_mux);
-    return id;
+    return reserve_msg_id_locked(global_msg_id, msg_id_mux);
 }
 
 bool Messenger::compute_hmac(uint8_t* out, const uint8_t* hmac_input, size_t len, const uint8_t* key) {

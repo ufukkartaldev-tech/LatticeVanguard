@@ -56,6 +56,12 @@ public:
     static bool test_concurrent_send_ids();
 };
 
+// 6. Eşzamanlılık (Concurrency) Testleri
+class ConcurrencyTester {
+public:
+    static bool test_msg_id_allocation();
+};
+
 // Test Suite Yöneticisi
 class TestSuite {
 public:
