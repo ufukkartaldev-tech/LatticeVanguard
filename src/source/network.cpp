@@ -16,6 +16,22 @@ namespace Network {
 using namespace PQC::Memory;
 using namespace PQC::Security;
 
+// --- Internal packet/message container types ---
+// Defined up front so the static buffer pools below can reference them.
+struct raw_packet_t {
+    uint8_t mac[6];
+    uint8_t data[250];
+    int len;
+};
+
+struct network_msg_t {
+    uint8_t target_mac[6];
+    uint8_t final_mac[6];
+    uint8_t* data;
+    size_t len;
+    uint32_t msg_id;   // Captured at enqueue time (see send_reliable)
+};
+
 // --- GÜVENLİK KATI: Modül Seviyesinde İzole Değişkenler ---
 static MessageBufferHandle_t network_msg_buffer = NULL;
 static SemaphoreHandle_t hmac_mutex = NULL;
@@ -34,15 +50,10 @@ struct network_msg_buffer_t {
 static network_msg_buffer_t send_pool[SEND_POOL_SIZE];
 static QueueHandle_t free_send_queue = NULL;
 
-struct raw_packet_t {
-    uint8_t mac[6];
-    uint8_t data[250];
-    int len;
-};
-
 static peer_record_t peer_registry[MAX_PEERS];
 static blacklist_t blacklist[MAX_PEERS];
 static uint32_t global_msg_id = 1000;
+static portMUX_TYPE msg_id_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile bool messenger_busy = false;
 static volatile bool last_send_ok = false;
 static TaskHandle_t network_task_handle = NULL;
@@ -51,13 +62,6 @@ static volatile uint8_t expected_ack_seq = 0;
 
 static uint8_t LOCAL_MAC[6];
 static uint8_t HMAC_SECRET[32] = {0}; // Silinen Hardcoded Key (System::KeyVault üzerinden NVS'ten yüklenecek)
-
-struct network_msg_t {
-    uint8_t target_mac[6];
-    uint8_t final_mac[6];
-    uint8_t* data;
-    size_t len;
-};
 
 // Task Prototypes
 void network_task(void* pvParameters);
@@ -248,8 +252,15 @@ bool Messenger::send_reliable(const uint8_t* peer_mac, const uint8_t* data, size
     memcpy(next_buf->msg.final_mac, peer_mac, 6);
     memcpy(next_buf->payload, data, len);
     next_buf->msg.len = len;
-    global_msg_id++;
-    
+
+    // Atomically reserve a unique message id and bind it to THIS buffer, so the
+    // id travels with the message instead of being read from the shared global
+    // at transmit time (which races with concurrent send_reliable callers).
+    portENTER_CRITICAL(&msg_id_mux);
+    uint32_t assigned_id = ++global_msg_id;
+    portEXIT_CRITICAL(&msg_id_mux);
+    next_buf->msg.msg_id = assigned_id;
+
     if (xQueueSend(network_queue, &next_buf, 0) == pdPASS) return true;
     
     xQueueSend(free_send_queue, &next_buf, 0);
@@ -287,7 +298,7 @@ void network_task(void* pvParameters) {
                                 m->len - (i * PQC_PAYLOAD_SIZE) : PQC_PAYLOAD_SIZE;
                 h.type = MSG_DATA;
                 memcpy(h.final_dest, m->final_mac, 6); 
-                h.msg_id = global_msg_id;
+                h.msg_id = m->msg_id;
                 h.seq = i;
                 h.total = total;
                 h.payload_len = (uint8_t)c_len;
