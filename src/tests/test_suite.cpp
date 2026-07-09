@@ -38,6 +38,16 @@ void TestSuite::run_all_tests() {
     log_test("Kyber stability", KyberTester::test_kyber_kem_vectors());
     log_test("Implicit Rejection", KyberTester::test_decaps_failure());
 
+#ifndef ARDUINO
+    // 2b. Known-Answer / regression vectors (host-only deterministic RNG).
+    // Pins the exact key/ciphertext/shared-secret bytes so any deviation in the
+    // underlying maths (NTT, Montgomery, noise sampler, packing) is caught,
+    // unlike the self-consistency checks above.
+    log_test("Kyber512 KAT", KatTester::test_kyber512_kat());
+    log_test("Kyber768 KAT", KatTester::test_kyber768_kat());
+    log_test("Dilithium2 Keygen KAT", KatTester::test_dilithium2_keygen_kat());
+#endif
+
 #ifdef ARDUINO
     // 3. System Audit
     log_test("Entropy Quality", AuditTester::test_randomness_entropy());
