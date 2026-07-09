@@ -27,6 +27,19 @@ public:
      * @brief Safely release the DRBG and entropy contexts.
      */
     static void release();
+
+#ifndef ARDUINO
+    /**
+     * @brief TEST-ONLY (host build): make randombytes() deterministic.
+     *
+     * Switches the generator to a reproducible SHA3-512 counter stream seeded
+     * from `seed`, so known-answer / regression tests produce identical
+     * key material, ciphertexts and signatures on every run. Pass a null seed
+     * (or len 0) to restore the OS entropy source. Never compiled into the
+     * ESP32 firmware.
+     */
+    static void set_deterministic(const uint8_t* seed, size_t len);
+#endif
 };
 
 } // namespace System

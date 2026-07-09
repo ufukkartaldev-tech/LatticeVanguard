@@ -8,6 +8,7 @@
 #include <mbedtls/entropy.h>
 #else
 #include <random>
+#include "../include/fips202.h"
 #endif
 
 namespace PQC {
@@ -81,13 +82,47 @@ void CSPRNG::release() {
 // production key generation.
 // ---------------------------------------------------------------------------
 
+// Test-only deterministic generator state (see set_deterministic).
+static bool     det_mode = false;
+static uint8_t  det_seed[32];
+static uint64_t det_ctr = 0;
+
 void CSPRNG::init() {
+    initialized = true;
+}
+
+void CSPRNG::set_deterministic(const uint8_t* seed, size_t len) {
+    if (seed == nullptr || len == 0) {
+        det_mode = false;
+        return;
+    }
+    memset(det_seed, 0, sizeof(det_seed));
+    memcpy(det_seed, seed, len < sizeof(det_seed) ? len : sizeof(det_seed));
+    det_ctr = 0;
+    det_mode = true;
     initialized = true;
 }
 
 void CSPRNG::randombytes(uint8_t* output, size_t length) {
     if (!initialized) {
         init();
+    }
+
+    if (det_mode) {
+        // Reproducible stream: block_i = SHA3-512(seed || counter_le64).
+        uint8_t in[40];
+        uint8_t block[64];
+        memcpy(in, det_seed, 32);
+        size_t i = 0;
+        while (i < length) {
+            for (int b = 0; b < 8; b++) in[32 + b] = (uint8_t)(det_ctr >> (8 * b));
+            det_ctr++;
+            sha3_512(block, in, sizeof(in));
+            size_t chunk = (length - i < sizeof(block)) ? (length - i) : sizeof(block);
+            memcpy(output + i, block, chunk);
+            i += chunk;
+        }
+        return;
     }
 
     std::random_device rd;

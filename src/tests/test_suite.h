@@ -33,6 +33,14 @@ public:
     static bool test_dilithium_malleability();
 };
 
+// 3b. Known-Answer / regression vectors (host-only, deterministic seed)
+class KatTester {
+public:
+    static bool test_kyber512_kat();
+    static bool test_kyber768_kat();
+    static bool test_dilithium2_keygen_kat();
+};
+
 // 4. Sistem ve Güvenlik Denetimi
 class AuditTester {
 public:
